@@ -1,5 +1,10 @@
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from 'react';
 
 import {
     ActivityIndicator,
@@ -14,38 +19,48 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
     AlertCircle,
-    ArrowDownRight,
+    ArrowDownLeft,
+    ArrowUpRight,
     RefreshCw,
     ReceiptText,
     Wallet,
 } from 'lucide-react-native';
 
 import { getExpenses } from '../services/expenseStorage';
+import { getIncomes } from '../services/incomeStorage';
 
 import type { Expense } from '../types/expense';
+import type { Income } from '../types/income';
+import type { Transaction } from '../types/transaction';
+import { sortTransactions } from '../types/transaction';
 
 import {
-    colors,
     layout,
     radius,
     spacing,
     typography,
 } from '../constants/theme';
 
+import {
+    calculateFinancialTotals,
+    formatINR,
+} from '../utils/money';
+import type { ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
+
 interface TransactionHistoryScreenProps {
     onAddExpense: () => void;
     onSelectExpense: (expense: Expense) => void;
+    onSelectIncome: (income: Income) => void;
 }
 
-function formatCurrency(amount: number): string {
-    return `₹${amount.toLocaleString('en-IN', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })}`;
-}
+// Shared currency formatter used across Shavro.
+const formatCurrency = formatINR;
 
 function formatDate(dateString: string): string {
-    const [year, month, day] = dateString.split('-').map(Number);
+    const [year, month, day] = dateString
+        .split('-')
+        .map(Number);
 
     const date = new Date(year, month - 1, day);
 
@@ -63,11 +78,16 @@ function formatDate(dateString: string): string {
 function formatName(value: string): string {
     return value
         .replace(/[-_]/g, ' ')
-        .replace(/\b\w/g, (character) => character.toUpperCase());
+        .replace(/\b\w/g, character =>
+            character.toUpperCase()
+        );
 }
 
 function getCategoryName(expense: Expense): string {
-    if (expense.categoryId === 'other' && expense.expenseName) {
+    if (
+        expense.categoryId === 'other' &&
+        expense.expenseName
+    ) {
         return expense.expenseName;
     }
 
@@ -75,7 +95,10 @@ function getCategoryName(expense: Expense): string {
 }
 
 function getPaymentName(expense: Expense): string {
-    if (expense.paymentMethodId === 'other' && expense.otherMethodName) {
+    if (
+        expense.paymentMethodId === 'other' &&
+        expense.otherMethodName
+    ) {
         return expense.otherMethodName;
     }
 
@@ -86,60 +109,116 @@ function getPaymentName(expense: Expense): string {
     return formatName(expense.paymentMethodId);
 }
 
+function getIncomeCategoryName(income: Income): string {
+    if (income.incomeName?.trim()) {
+        return income.incomeName;
+    }
+
+    return formatName(income.categoryId);
+}
+
 export default function TransactionHistoryScreen({
     onAddExpense,
     onSelectExpense,
+    onSelectIncome,
 }: TransactionHistoryScreenProps) {
-    const [expenses, setExpenses] = useState<Expense[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { colors } = useAppTheme();
 
-    const loadExpenses = useCallback(async () => {
+    const styles = useMemo(
+        () => createStyles(colors),
+        [colors]
+    );
+
+    const [transactions, setTransactions] = useState<
+        Transaction[]
+    >([]);
+
+    const [loading, setLoading] = useState(true);
+
+    const [error, setError] = useState<string | null>(
+        null
+    );
+
+    const loadTransactions = useCallback(async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const savedExpenses = await getExpenses();
+            const [savedExpenses, savedIncomes] =
+                await Promise.all([
+                    getExpenses(),
+                    getIncomes(),
+                ]);
 
-            const sortedExpenses = [...savedExpenses].sort((a, b) => {
-                const dateComparison = b.transactionDate.localeCompare(
-                    a.transactionDate
-                );
+            const combined: Transaction[] = [
+                ...savedExpenses.map(
+                    (expense): Transaction => ({
+                        type: 'EXPENSE',
+                        data: expense,
+                    })
+                ),
 
-                if (dateComparison !== 0) {
-                    return dateComparison;
-                }
+                ...savedIncomes.map(
+                    (income): Transaction => ({
+                        type: 'INCOME',
+                        data: income,
+                    })
+                ),
+            ];
 
-                return b.createdAt.localeCompare(a.createdAt);
-            });
-
-            setExpenses(sortedExpenses);
+            setTransactions(sortTransactions(combined));
         } catch (loadError) {
-            console.error('Failed to load expenses:', loadError);
+            console.error(
+                'Failed to load transactions:',
+                loadError
+            );
 
-            setError('Unable to load transactions. Please try again.');
+            setError(
+                'Unable to load transactions. Please try again.'
+            );
         } finally {
             setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        void loadExpenses();
-    }, [loadExpenses]);
+        void loadTransactions();
+    }, [loadTransactions]);
 
-    const totalExpenses = expenses.reduce(
-        (total, expense) => total + expense.amount,
-        0
-    );
+    // Calculate totals using the same utility as
+    // HomeDashboardScreen.tsx.
+    const {
+        totalIncome,
+        totalExpenses,
+        netBalance,
+    } = useMemo(() => {
+        const incomes = transactions
+            .filter(
+                (transaction) => transaction.type === 'INCOME'
+            )
+            .map((transaction) => transaction.data);
 
-    const groupedExpenses = expenses.reduce<
-        Record<string, Expense[]>
-    >((groups, expense) => {
-        if (!groups[expense.transactionDate]) {
-            groups[expense.transactionDate] = [];
+        const expenses = transactions
+            .filter(
+                (transaction) => transaction.type === 'EXPENSE'
+            )
+            .map((transaction) => transaction.data);
+
+        return calculateFinancialTotals(
+            incomes,
+            expenses
+        );
+    }, [transactions]);
+    const groupedTransactions = transactions.reduce<
+        Record<string, Transaction[]>
+    >((groups, transaction) => {
+        const date = transaction.data.transactionDate;
+
+        if (!groups[date]) {
+            groups[date] = [];
         }
 
-        groups[expense.transactionDate].push(expense);
+        groups[date].push(transaction);
 
         return groups;
     }, {});
@@ -151,15 +230,20 @@ export default function TransactionHistoryScreen({
                 showsVerticalScrollIndicator={false}
             >
                 <View style={styles.header}>
-                    <Text style={styles.heading}>Transactions</Text>
+                    <Text style={styles.heading}>
+                        Transactions
+                    </Text>
 
                     <Pressable
-                        onPress={() => void loadExpenses()}
+                        onPress={() => void loadTransactions()}
                         accessibilityRole="button"
                         accessibilityLabel="Refresh transactions"
                         style={styles.refreshButton}
                     >
-                        <RefreshCw size={20} color={colors.text} />
+                        <RefreshCw
+                            size={20}
+                            color={colors.text}
+                        />
                     </Pressable>
                 </View>
 
@@ -169,6 +253,7 @@ export default function TransactionHistoryScreen({
                             size="large"
                             color={colors.primary}
                         />
+
                         <Text style={styles.stateText}>
                             Loading transactions...
                         </Text>
@@ -180,11 +265,14 @@ export default function TransactionHistoryScreen({
                             color={colors.error}
                         />
 
-                        <Text style={styles.stateText}>{error}</Text>
+                        <Text style={styles.stateText}>
+                            {error}
+                        </Text>
 
                         <Pressable
-                            onPress={() => void loadExpenses()}
+                            onPress={() => void loadTransactions()}
                             style={styles.actionButton}
+                            accessibilityRole="button"
                         >
                             <Text style={styles.actionButtonText}>
                                 Try Again
@@ -196,7 +284,7 @@ export default function TransactionHistoryScreen({
                         <View style={styles.summaryCard}>
                             <View style={styles.summaryHeader}>
                                 <Text style={styles.summaryLabel}>
-                                    TOTAL EXPENSES
+                                    NET BALANCE
                                 </Text>
 
                                 <Wallet
@@ -205,19 +293,50 @@ export default function TransactionHistoryScreen({
                                 />
                             </View>
 
-                            <Text style={styles.totalAmount}>
-                                {formatCurrency(totalExpenses)}
+                            <Text
+                                style={[
+                                    styles.totalAmount,
+                                    netBalance < 0 &&
+                                    styles.negativeBalance,
+                                ]}
+                            >
+                                {netBalance < 0 ? '−' : ''}
+                                {formatCurrency(Math.abs(netBalance))}
                             </Text>
 
                             <Text style={styles.transactionCount}>
-                                {expenses.length}{' '}
-                                {expenses.length === 1
+                                {transactions.length}{' '}
+                                {transactions.length === 1
                                     ? 'transaction'
                                     : 'transactions'}
                             </Text>
+
+                            <View style={styles.summaryDivider} />
+
+                            <View style={styles.summaryTotals}>
+                                <View style={styles.summaryColumn}>
+                                    <Text style={styles.summaryLabel}>
+                                        TOTAL INCOME
+                                    </Text>
+
+                                    <Text style={styles.incomeTotal}>
+                                        {formatCurrency(totalIncome)}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.summaryColumn}>
+                                    <Text style={styles.summaryLabel}>
+                                        TOTAL EXPENSES
+                                    </Text>
+
+                                    <Text style={styles.expenseTotal}>
+                                        {formatCurrency(totalExpenses)}
+                                    </Text>
+                                </View>
+                            </View>
                         </View>
 
-                        {expenses.length === 0 ? (
+                        {transactions.length === 0 ? (
                             <View style={styles.centerState}>
                                 <ReceiptText
                                     size={40}
@@ -225,16 +344,17 @@ export default function TransactionHistoryScreen({
                                 />
 
                                 <Text style={styles.emptyTitle}>
-                                    No expenses yet
+                                    No transactions yet
                                 </Text>
 
                                 <Text style={styles.stateText}>
-                                    Your saved expenses will appear here.
+                                    Your income and expenses will appear here.
                                 </Text>
 
                                 <Pressable
                                     onPress={onAddExpense}
                                     style={styles.actionButton}
+                                    accessibilityRole="button"
                                 >
                                     <Text style={styles.actionButtonText}>
                                         Add Expense
@@ -242,54 +362,121 @@ export default function TransactionHistoryScreen({
                                 </Pressable>
                             </View>
                         ) : (
-                            Object.entries(groupedExpenses).map(
-                                ([date, transactions]) => (
-                                    <View key={date} style={styles.dateGroup}>
+                            Object.entries(groupedTransactions).map(
+                                ([date, dateTransactions]) => (
+                                    <View
+                                        key={date}
+                                        style={styles.dateGroup}
+                                    >
                                         <Text style={styles.dateHeading}>
                                             {formatDate(date)}
                                         </Text>
 
+                                        {dateTransactions.map(transaction => {
+                                            const isIncome =
+                                                transaction.type === 'INCOME';
 
-                                        {transactions.map((expense) => (
-                                            <Pressable
-                                                key={expense.id}
-                                                style={styles.transactionRow}
-                                                onPress={() => onSelectExpense(expense)}
-                                                accessibilityRole="button"
-                                                accessibilityLabel={`View ${getCategoryName(expense)} expense of ${formatCurrency(expense.amount)}`}
-                                            >
-                                                <View style={styles.transactionIcon}>
-                                                    <ArrowDownRight
-                                                        size={21}
-                                                        color={colors.primary}
-                                                    />
-                                                </View>
+                                            const item = transaction.data;
 
-                                                <View style={styles.transactionDetails}>
-                                                    <Text style={styles.categoryName}>
-                                                        {getCategoryName(expense)}
-                                                    </Text>
+                                            const title = isIncome
+                                                ? getIncomeCategoryName(
+                                                    transaction.data
+                                                )
+                                                : getCategoryName(
+                                                    transaction.data
+                                                );
 
-                                                    <Text style={styles.paymentName}>
-                                                        {getPaymentName(expense)}
-                                                    </Text>
+                                            const subtitle = isIncome
+                                                ? 'Income'
+                                                : getPaymentName(
+                                                    transaction.data
+                                                );
 
-                                                    {expense.notes ? (
+                                            const amountLabel = `${isIncome ? '+' : '−'
+                                                }${formatCurrency(item.amount)}`;
+
+                                            return (
+                                                <Pressable
+                                                    key={`${transaction.type}-${item.id}`}
+                                                    style={styles.transactionRow}
+                                                    onPress={() => {
+                                                        if (
+                                                            transaction.type === 'INCOME'
+                                                        ) {
+                                                            onSelectIncome(
+                                                                transaction.data
+                                                            );
+                                                        } else {
+                                                            onSelectExpense(
+                                                                transaction.data
+                                                            );
+                                                        }
+                                                    }}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={
+                                                        `${title}, ${subtitle}, ` +
+                                                        amountLabel
+                                                    }
+                                                >
+                                                    <View
+                                                        style={[
+                                                            styles.transactionIcon,
+                                                            isIncome
+                                                                ? styles.incomeIcon
+                                                                : styles.expenseIcon,
+                                                        ]}
+                                                    >
+                                                        {isIncome ? (
+                                                            <ArrowDownLeft
+                                                                size={21}
+                                                                color={colors.success}
+                                                            />
+                                                        ) : (
+                                                            <ArrowUpRight
+                                                                size={21}
+                                                                color={colors.error}
+                                                            />
+                                                        )}
+                                                    </View>
+
+                                                    <View
+                                                        style={styles.transactionDetails}
+                                                    >
                                                         <Text
-                                                            style={styles.notes}
-                                                            numberOfLines={2}
+                                                            style={styles.categoryName}
+                                                            numberOfLines={1}
+                                                            ellipsizeMode="tail"
                                                         >
-                                                            {expense.notes}
+                                                            {title}
                                                         </Text>
-                                                    ) : null}
-                                                </View>
 
-                                                <Text style={styles.expenseAmount}>
-                                                    −{formatCurrency(expense.amount)}
-                                                </Text>
-                                            </Pressable>
-                                        ))}
+                                                        <Text style={styles.paymentName}>
+                                                            {subtitle}
+                                                        </Text>
 
+                                                        {item.notes ? (
+                                                            <Text
+                                                                style={styles.notes}
+                                                                numberOfLines={2}
+                                                            >
+                                                                {item.notes}
+                                                            </Text>
+                                                        ) : null}
+                                                    </View>
+
+                                                    <Text
+                                                        style={[
+                                                            styles.transactionAmount,
+                                                            isIncome
+                                                                ? styles.incomeAmount
+                                                                : styles.expenseAmount,
+                                                        ]}
+                                                    >
+                                                        {amountLabel}
+                                                    </Text>
+                                                </Pressable>
+                                            );
+                                        })}
                                     </View>
                                 )
                             )
@@ -301,177 +488,234 @@ export default function TransactionHistoryScreen({
     );
 }
 
-const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
+function createStyles(colors: ThemeColors) {
+    return StyleSheet.create({
+        safeArea: {
+            flex: 1,
+            backgroundColor: colors.background,
+        },
 
-    content: {
-        flexGrow: 1,
-        paddingHorizontal: layout.screenPadding,
-        paddingTop: spacing.xl,
-        paddingBottom: spacing.xxl,
-    },
+        content: {
+            flexGrow: 1,
+            paddingHorizontal: layout.screenPadding,
+            paddingTop: spacing.xl,
+            paddingBottom: spacing.xxl,
+        },
 
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: spacing.xl,
-    },
+        header: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: spacing.xl,
+        },
 
-    heading: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.heading,
-        fontWeight: typography.weights.bold,
-        color: colors.text,
-    },
+        heading: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.heading,
+            fontWeight: typography.weights.bold,
+            color: colors.text,
+        },
 
-    refreshButton: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: radius.medium,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
+        refreshButton: {
+            width: 44,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: radius.medium,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+        },
 
-    summaryCard: {
-        backgroundColor: colors.surfaceMuted,
-        borderRadius: radius.large,
-        padding: spacing.xl,
-        marginBottom: spacing.xl,
-    },
+        summaryCard: {
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: radius.large,
+            padding: spacing.xl,
+            marginBottom: spacing.xl,
+        },
 
-    summaryHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: spacing.md,
-    },
+        summaryHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: spacing.md,
+        },
 
-    summaryLabel: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.caption,
-        fontWeight: typography.weights.semibold,
-        color: colors.textSecondary,
-    },
+        summaryLabel: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.caption,
+            fontWeight: typography.weights.semibold,
+            color: colors.textSecondary,
+        },
 
-    totalAmount: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.amount,
-        fontWeight: typography.weights.bold,
-        color: colors.text,
-    },
+        totalAmount: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.amount,
+            fontWeight: typography.weights.bold,
+            color: colors.text,
+        },
 
-    transactionCount: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.small,
-        color: colors.textSecondary,
-        marginTop: spacing.xs,
-    },
+        negativeBalance: {
+            color: colors.error,
+        },
 
-    dateGroup: {
-        marginBottom: spacing.xl,
-    },
+        transactionCount: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.small,
+            color: colors.textSecondary,
+            marginTop: spacing.xs,
+        },
 
-    dateHeading: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.small,
-        fontWeight: typography.weights.semibold,
-        color: colors.textSecondary,
-        marginBottom: spacing.md,
-    },
+        summaryDivider: {
+            height: 1,
+            backgroundColor: colors.border,
+            marginVertical: spacing.lg,
+        },
 
-    transactionRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-        gap: spacing.md,
-    },
+        summaryTotals: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            gap: spacing.md,
+        },
 
-    transactionIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: radius.medium,
-        backgroundColor: colors.primaryLight,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+        summaryColumn: {
+            flex: 1,
+            minWidth: 0,
+        },
 
-    transactionDetails: {
-        flex: 1,
-    },
+        incomeTotal: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.subtitle,
+            fontWeight: typography.weights.bold,
+            color: colors.success,
+            marginTop: spacing.sm,
+        },
 
-    categoryName: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.body,
-        fontWeight: typography.weights.semibold,
-        color: colors.text,
-    },
+        expenseTotal: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.subtitle,
+            fontWeight: typography.weights.bold,
+            color: colors.error,
+            marginTop: spacing.sm,
+        },
 
-    paymentName: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.small,
-        color: colors.textSecondary,
-        marginTop: spacing.xs,
-    },
+        dateGroup: {
+            marginBottom: spacing.xl,
+        },
 
-    notes: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.small,
-        color: colors.textSecondary,
-        marginTop: spacing.xs,
-    },
+        dateHeading: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.small,
+            fontWeight: typography.weights.semibold,
+            color: colors.textSecondary,
+            marginBottom: spacing.md,
+        },
 
-    expenseAmount: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.body,
-        fontWeight: typography.weights.semibold,
-        color: colors.text,
-    },
+        transactionRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: spacing.lg,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            gap: spacing.md,
+        },
 
-    centerState: {
-        flex: 1,
-        minHeight: 260,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.md,
-        paddingVertical: spacing.xxl,
-    },
+        transactionIcon: {
+            width: 44,
+            height: 44,
+            borderRadius: radius.medium,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
 
-    emptyTitle: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.subtitle,
-        fontWeight: typography.weights.semibold,
-        color: colors.text,
-    },
+        expenseIcon: {
+            backgroundColor: colors.expenseIconBackground,
+        },
 
-    stateText: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.small,
-        color: colors.textSecondary,
-        textAlign: 'center',
-    },
+        incomeIcon: {
+            backgroundColor: colors.incomeIconBackground,
+        },
 
-    actionButton: {
-        backgroundColor: colors.primary,
-        paddingHorizontal: spacing.xl,
-        minHeight: 44,
-        borderRadius: radius.medium,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: spacing.sm,
-    },
+        transactionDetails: {
+            flex: 1,
+            minWidth: 0,
+        },
 
-    actionButtonText: {
-        fontFamily: typography.fontFamily,
-        fontSize: typography.sizes.body,
-        fontWeight: typography.weights.semibold,
-        color: colors.background,
-    },
-});
+        categoryName: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.body,
+            fontWeight: typography.weights.semibold,
+            color: colors.text,
+        },
+
+        paymentName: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.small,
+            color: colors.textSecondary,
+            marginTop: spacing.xs,
+        },
+
+        notes: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.small,
+            color: colors.textSecondary,
+            marginTop: spacing.xs,
+        },
+
+        transactionAmount: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.body,
+            fontWeight: typography.weights.semibold,
+            textAlign: 'right',
+            flexShrink: 1,
+        },
+
+        expenseAmount: {
+            color: colors.error,
+        },
+
+        incomeAmount: {
+            color: colors.success,
+        },
+
+        centerState: {
+            flex: 1,
+            minHeight: 260,
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: spacing.md,
+            paddingVertical: spacing.xxl,
+        },
+
+        emptyTitle: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.subtitle,
+            fontWeight: typography.weights.semibold,
+            color: colors.text,
+        },
+
+        stateText: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.small,
+            color: colors.textSecondary,
+            textAlign: 'center',
+        },
+
+        actionButton: {
+            backgroundColor: colors.primary,
+            paddingHorizontal: spacing.xl,
+            minHeight: 44,
+            borderRadius: radius.medium,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginTop: spacing.sm,
+        },
+
+        actionButtonText: {
+            fontFamily: typography.fontFamily,
+            fontSize: typography.sizes.body,
+            fontWeight: typography.weights.semibold,
+            color: colors.background,
+        },
+    });
+}

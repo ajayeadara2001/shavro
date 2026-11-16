@@ -7,7 +7,8 @@ import type {
   UpdateExpenseInput,
 } from '../types/expense';
 
-const STORAGE_KEY = 'expenseflow_expenses_v1';
+const STORAGE_KEY = 'shavro_expenses_v1';
+const LEGACY_STORAGE_KEY = 'expenseflow_expenses_v1';
 
 function isExpense(value: unknown): value is Expense {
   if (!value || typeof value !== 'object') {
@@ -43,8 +44,24 @@ function generateId(): string {
 
 export async function getExpenses(): Promise<Expense[]> {
   try {
-    const stored = await AsyncStorage.getItem(STORAGE_KEY);
+    let stored = await AsyncStorage.getItem(STORAGE_KEY);
 
+    if (stored === null) {
+      const legacyData = await AsyncStorage.getItem(
+        LEGACY_STORAGE_KEY
+      );
+
+      if (legacyData !== null) {
+        const parsed: unknown = JSON.parse(legacyData);
+
+        if (!Array.isArray(parsed) || !parsed.every(isExpense)) {
+          throw new Error('Legacy expenses contain invalid data.');
+        }
+
+        await AsyncStorage.setItem(STORAGE_KEY, legacyData);
+        stored = legacyData;
+      }
+    }
     if (!stored) {
       return [];
     }

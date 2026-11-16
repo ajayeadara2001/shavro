@@ -1,5 +1,8 @@
-
-import React, { useRef, useState } from 'react';
+import React, {
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   Platform,
@@ -10,14 +13,17 @@ import {
 } from 'react-native';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
+
 import { CalendarDays } from 'lucide-react-native';
 
 import {
-  colors,
+  type ThemeColors,
   radius,
   spacing,
   typography,
 } from '../constants/theme';
+
+import { useAppTheme } from '../context/ThemeContext';
 
 interface TransactionDatePickerProps {
   value: Date;
@@ -36,8 +42,14 @@ function formatDate(date: Date): string {
 // Example: 2026-11-15
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0');
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
 }
@@ -46,7 +58,15 @@ export default function TransactionDatePicker({
   value,
   onChange,
 }: TransactionDatePickerProps) {
-  const [showPicker, setShowPicker] = useState(false);
+  const { colors, isDark } = useAppTheme();
+
+  const styles = useMemo(
+    () => createStyles(colors),
+    [colors]
+  );
+
+  const [showPicker, setShowPicker] =
+    useState(false);
 
   const webInputRef = useRef<any>(null);
 
@@ -54,7 +74,7 @@ export default function TransactionDatePicker({
 
   const handleNativeChange = (
     _event: unknown,
-    selectedDate?: Date,
+    selectedDate?: Date
   ) => {
     if (Platform.OS === 'android') {
       setShowPicker(false);
@@ -64,7 +84,7 @@ export default function TransactionDatePicker({
       selectedDate &&
       !Number.isNaN(selectedDate.getTime()) &&
       toLocalDateString(selectedDate) <=
-        toLocalDateString(new Date())
+      toLocalDateString(new Date())
     ) {
       onChange(selectedDate);
     }
@@ -84,7 +104,7 @@ export default function TransactionDatePicker({
     const selected = new Date(
       year,
       month - 1,
-      day,
+      day
     );
 
     if (
@@ -118,7 +138,9 @@ export default function TransactionDatePicker({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Date</Text>
+      <Text style={styles.label}>
+        Date
+      </Text>
 
       {Platform.OS === 'web' ? (
         <View style={styles.webContainer}>
@@ -126,7 +148,9 @@ export default function TransactionDatePicker({
             style={styles.webField}
             onPress={openWebCalendar}
             accessibilityRole="button"
-            accessibilityLabel={`Select transaction date, ${formatDate(value)}`}
+            accessibilityLabel={
+              `Select transaction date, ${formatDate(value)}`
+            }
           >
             <CalendarDays
               size={20}
@@ -164,7 +188,9 @@ export default function TransactionDatePicker({
             style={styles.dateField}
             onPress={() => setShowPicker(true)}
             accessibilityRole="button"
-            accessibilityLabel={`Transaction date ${formatDate(value)}`}
+            accessibilityLabel={
+              `Transaction date ${formatDate(value)}`
+            }
           >
             <CalendarDays
               size={20}
@@ -186,86 +212,94 @@ export default function TransactionDatePicker({
                   : 'default'
               }
               maximumDate={today}
+              themeVariant={
+                isDark ? 'dark' : 'light'
+              }
               onChange={handleNativeChange}
             />
           )}
 
-          {showPicker && Platform.OS === 'ios' && (
-            <Pressable
-              onPress={() => setShowPicker(false)}
-              accessibilityRole="button"
-              style={styles.doneButton}
-            >
-              <Text style={styles.doneText}>
-                Done
-              </Text>
-            </Pressable>
-          )}
+          {showPicker &&
+            Platform.OS === 'ios' && (
+              <Pressable
+                onPress={() =>
+                  setShowPicker(false)
+                }
+                accessibilityRole="button"
+                style={styles.doneButton}
+              >
+                <Text style={styles.doneText}>
+                  Done
+                </Text>
+              </Pressable>
+            )}
         </>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-  },
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: {
+      width: '100%',
+    },
 
-  label: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    fontWeight: typography.weights.medium,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
+    label: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      fontWeight: typography.weights.medium,
+      color: colors.text,
+      marginBottom: spacing.sm,
+    },
 
-  webContainer: {
-    width: '100%',
-    position: 'relative',
-  },
+    webContainer: {
+      width: '100%',
+      position: 'relative',
+    },
 
-  webField: {
-    minHeight: 56,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.medium,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-  },
+    webField: {
+      minHeight: 56,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.medium,
+      paddingHorizontal: spacing.lg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      backgroundColor: colors.surface,
+    },
 
-  dateField: {
-    minHeight: 56,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.medium,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-  },
+    dateField: {
+      minHeight: 56,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.medium,
+      paddingHorizontal: spacing.lg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      backgroundColor: colors.surface,
+    },
 
-  dateText: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    color: colors.text,
-  },
+    dateText: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      color: colors.text,
+    },
 
-  doneButton: {
-    alignSelf: 'flex-end',
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-  },
+    doneButton: {
+      alignSelf: 'flex-end',
+      minHeight: 44,
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
+    },
 
-  doneText: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    fontWeight: typography.weights.semibold,
-    color: colors.primary,
-  },
-});
+    doneText: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      fontWeight: typography.weights.semibold,
+      color: colors.primary,
+    },
+  });
+}

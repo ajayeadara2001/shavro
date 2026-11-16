@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+
 import {
   ActivityIndicator,
   Pressable,
@@ -7,11 +8,13 @@ import {
 } from 'react-native';
 
 import {
-  colors,
+  type ThemeColors,
   layout,
   radius,
   typography,
 } from '../constants/theme';
+
+import { useAppTheme } from '../context/ThemeContext';
 
 interface PrimaryButtonProps {
   title: string;
@@ -26,6 +29,13 @@ export default function PrimaryButton({
   disabled = false,
   loading = false,
 }: PrimaryButtonProps) {
+  const { colors } = useAppTheme();
+
+  const styles = useMemo(
+    () => createStyles(colors),
+    [colors]
+  );
+
   const isDisabled = disabled || loading;
 
   return (
@@ -45,33 +55,42 @@ export default function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={colors.background} />
+        <ActivityIndicator
+          color="#FFFFFF"
+        />
       ) : (
-        <Text style={styles.buttonText}>{title}</Text>
+        <Text style={styles.buttonText}>
+          {title}
+        </Text>
       )}
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    height: layout.buttonHeight,
-    backgroundColor: colors.primary,
-    borderRadius: radius.large,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  buttonText: {
-    color: colors.background,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    fontWeight: typography.weights.semibold,
-  },
-  pressed: {
-    opacity: 0.85,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    button: {
+      height: layout.buttonHeight,
+      backgroundColor: colors.primary,
+      borderRadius: radius.large,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+    },
+
+    buttonText: {
+      color: '#FFFFFF',
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      fontWeight: typography.weights.semibold,
+    },
+
+    pressed: {
+      opacity: 0.85,
+    },
+
+    disabled: {
+      opacity: 0.5,
+    },
+  });
+}

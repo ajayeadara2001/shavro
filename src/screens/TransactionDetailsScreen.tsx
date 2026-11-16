@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import {
   Alert,
@@ -24,16 +23,17 @@ import {
 } from 'lucide-react-native';
 
 import type { Expense } from '../types/expense';
-
 import { deleteExpense } from '../services/expenseStorage';
-
+import { formatINR } from '../utils/money';
 import {
-  colors,
+  type ThemeColors,
   layout,
   radius,
   spacing,
   typography,
 } from '../constants/theme';
+
+import { useAppTheme } from '../context/ThemeContext';
 
 interface TransactionDetailsScreenProps {
   expense: Expense;
@@ -42,10 +42,7 @@ interface TransactionDetailsScreenProps {
   onDeleted: () => void;
 }
 
-function showMessage(
-  title: string,
-  message: string
-): void {
+function showMessage(title: string, message: string): void {
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined') {
       window.alert(`${title}\n\n${message}`);
@@ -90,16 +87,8 @@ function confirmDeletion(): Promise<boolean> {
   });
 }
 
-function formatCurrency(amount: number): string {
-  return `₹${amount.toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 function formatDate(value: string): string {
   const [year, month, day] = value.split('-').map(Number);
-
   const date = new Date(year, month - 1, day);
 
   if (Number.isNaN(date.getTime())) {
@@ -143,16 +132,20 @@ function getPaymentMethod(expense: Expense): string {
   return formatName(expense.paymentMethodId);
 }
 
+type DetailStyles = ReturnType<typeof createStyles>;
+
 interface DetailRowProps {
   icon: React.ReactNode;
   label: string;
   value: string;
+  styles: DetailStyles;
 }
 
 function DetailRow({
   icon,
   label,
   value,
+  styles,
 }: DetailRowProps) {
   return (
     <View style={styles.detailRow}>
@@ -179,6 +172,13 @@ export default function TransactionDetailsScreen({
   onEdit,
   onDeleted,
 }: TransactionDetailsScreenProps) {
+  const { colors } = useAppTheme();
+
+  const styles = useMemo(
+    () => createStyles(colors),
+    [colors]
+  );
+
   const [deleting, setDeleting] = useState(false);
 
   const handleDelete = async (): Promise<void> => {
@@ -236,14 +236,14 @@ export default function TransactionDetailsScreen({
           </Text>
         </View>
 
-        {/* Amount */}
+        {/* Expense amount */}
         <View style={styles.amountCard}>
           <Text style={styles.amountLabel}>
             EXPENSE
           </Text>
 
           <Text style={styles.amount}>
-            −{formatCurrency(expense.amount)}
+            −{formatINR(expense.amount)}
           </Text>
 
           <Text style={styles.categorySubtitle}>
@@ -254,6 +254,7 @@ export default function TransactionDetailsScreen({
         {/* Transaction information */}
         <View style={styles.detailsCard}>
           <DetailRow
+            styles={styles}
             icon={
               <Tag
                 size={20}
@@ -265,6 +266,7 @@ export default function TransactionDetailsScreen({
           />
 
           <DetailRow
+            styles={styles}
             icon={
               <CreditCard
                 size={20}
@@ -276,6 +278,7 @@ export default function TransactionDetailsScreen({
           />
 
           <DetailRow
+            styles={styles}
             icon={
               <CalendarDays
                 size={20}
@@ -287,6 +290,7 @@ export default function TransactionDetailsScreen({
           />
 
           <DetailRow
+            styles={styles}
             icon={
               <FileText
                 size={20}
@@ -318,7 +322,7 @@ export default function TransactionDetailsScreen({
           </Text>
         </View>
 
-        {/* Actions */}
+        {/* Edit and Delete buttons */}
         <View style={styles.actions}>
           <Pressable
             onPress={() => onEdit(expense)}
@@ -367,174 +371,181 @@ export default function TransactionDetailsScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+// Theme-aware styles
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
 
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
-  },
+    content: {
+      paddingHorizontal: layout.screenPadding,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.xxl,
+    },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginBottom: spacing.xl,
+    },
 
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    backButton: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.medium,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  heading: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.heading,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    flexShrink: 1,
-  },
+    heading: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.heading,
+      fontWeight: typography.weights.bold,
+      color: colors.text,
+      flexShrink: 1,
+    },
 
-  amountCard: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.large,
-    padding: spacing.xl,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
+    amountCard: {
+      backgroundColor: colors.expenseSurface,
+      borderWidth: 1,
+      borderColor: colors.expenseBorder,
+      borderRadius: radius.large,
+      padding: spacing.xl,
+      alignItems: 'center',
+      marginBottom: spacing.xl,
+    },
 
-  amountLabel: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.caption,
-    fontWeight: typography.weights.semibold,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
+    amountLabel: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.caption,
+      fontWeight: typography.weights.semibold,
+      color: colors.textSecondary,
+      marginBottom: spacing.md,
+    },
 
-  amount: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.amount,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-  },
+    amount: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.amount,
+      fontWeight: typography.weights.bold,
+      color: colors.error,
+    },
 
-  categorySubtitle: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-  },
+    categorySubtitle: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      color: colors.textSecondary,
+      marginTop: spacing.sm,
+    },
 
-  detailsCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.large,
-    paddingHorizontal: spacing.lg,
-  },
+    detailsCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.large,
+      paddingHorizontal: spacing.lg,
+    },
 
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
+    detailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
 
-  detailIcon: {
-    width: 44,
-    height: 44,
-    backgroundColor: colors.primaryLight,
-    borderRadius: radius.medium,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    detailIcon: {
+      width: 44,
+      height: 44,
+      backgroundColor: colors.primaryLight,
+      borderRadius: radius.medium,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  detailContent: {
-    flex: 1,
-  },
+    detailContent: {
+      flex: 1,
+    },
 
-  detailLabel: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.small,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
+    detailLabel: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.small,
+      color: colors.textSecondary,
+      marginBottom: spacing.xs,
+    },
 
-  detailValue: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    fontWeight: typography.weights.medium,
-    color: colors.text,
-  },
+    detailValue: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      fontWeight: typography.weights.medium,
+      color: colors.text,
+    },
 
-  metadata: {
-    alignItems: 'center',
-    marginTop: spacing.xl,
-    gap: spacing.xs,
-  },
+    metadata: {
+      alignItems: 'center',
+      marginTop: spacing.xl,
+      gap: spacing.xs,
+    },
 
-  metadataLabel: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.caption,
-    color: colors.textSecondary,
-  },
+    metadataLabel: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.caption,
+      color: colors.textSecondary,
+    },
 
-  metadataValue: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.small,
-    color: colors.textSecondary,
-  },
+    metadataValue: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.small,
+      color: colors.textSecondary,
+    },
 
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.xxl,
-  },
+    actions: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginTop: spacing.xxl,
+    },
 
-  actionButton: {
-    flex: 1,
-    minHeight: 54,
-    borderRadius: radius.medium,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-  },
+    actionButton: {
+      flex: 1,
+      minHeight: 54,
+      borderRadius: radius.medium,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.sm,
+    },
 
-  editButton: {
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
+    editButton: {
+      backgroundColor: colors.primaryLight,
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
 
-  editButtonText: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.small,
-    fontWeight: typography.weights.semibold,
-    color: colors.primary,
-  },
+    editButtonText: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.small,
+      fontWeight: typography.weights.semibold,
+      color: colors.primary,
+    },
 
-  deleteButton: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
+    deleteButton: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.error,
+    },
 
-  deleteButtonText: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.small,
-    fontWeight: typography.weights.semibold,
-    color: colors.error,
-  },
-});
+    deleteButtonText: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.small,
+      fontWeight: typography.weights.semibold,
+      color: colors.error,
+    },
+  });
+}

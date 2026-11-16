@@ -1,5 +1,4 @@
-
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 import {
   Alert,
@@ -10,6 +9,7 @@ import {
   Text,
   TextInput,
   View,
+  Keyboard
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,16 +31,21 @@ import type {
 } from '../types/expense';
 
 import {
-  colors,
+  type ThemeColors,
   radius,
   spacing,
   typography,
   layout,
 } from '../constants/theme';
 
+import { useAppTheme } from '../context/ThemeContext';
+
 interface AddExpenseScreenProps {
   expenseToEdit?: Expense | null;
   onEditComplete?: () => void;
+
+  // Called after successfully saving a new expense.
+  onSaveComplete?: () => void;
 }
 
 function showMessage(
@@ -74,7 +79,15 @@ function parseTransactionDate(value: string): Date {
 export default function AddExpenseScreen({
   expenseToEdit = null,
   onEditComplete,
+  onSaveComplete,
 }: AddExpenseScreenProps) {
+  const { colors } = useAppTheme();
+
+  const styles = useMemo(
+    () => createStyles(colors),
+    [colors]
+  );
+
   const isEditing = expenseToEdit !== null;
 
   const [amount, setAmount] = useState(
@@ -100,7 +113,9 @@ export default function AddExpenseScreen({
   const [transactionDate, setTransactionDate] =
     useState<Date>(() =>
       expenseToEdit
-        ? parseTransactionDate(expenseToEdit.transactionDate)
+        ? parseTransactionDate(
+          expenseToEdit.transactionDate
+        )
         : new Date()
     );
 
@@ -110,7 +125,7 @@ export default function AddExpenseScreen({
 
   const [saving, setSaving] = useState(false);
 
-  // Prevent duplicate submissions from rapid taps.
+  // Prevent multiple save requests from rapid taps.
   const savingRef = useRef(false);
 
   const resetForm = (): void => {
@@ -143,7 +158,7 @@ export default function AddExpenseScreen({
       return;
     }
 
-    // Validate category.
+    // Validate expense category.
     if (!categoryId) {
       showMessage(
         'Category Required',
@@ -152,7 +167,7 @@ export default function AddExpenseScreen({
       return;
     }
 
-    // Validate custom expense name.
+    // Validate custom category name.
     if (
       categoryId === 'other' &&
       !otherExpenseName.trim()
@@ -173,7 +188,7 @@ export default function AddExpenseScreen({
       return;
     }
 
-    // Validate custom payment type.
+    // Validate custom payment method.
     if (
       paymentMethodId === 'other' &&
       !otherMethodName.trim()
@@ -226,7 +241,7 @@ export default function AddExpenseScreen({
 
     try {
       if (expenseToEdit) {
-        // Update the existing transaction.
+        // Update an existing expense.
         const updatedExpense = await updateExpense(
           expenseToEdit.id,
           input
@@ -242,9 +257,10 @@ export default function AddExpenseScreen({
           'Expense updated successfully!'
         );
 
+        // App.tsx navigates to Home and refreshes.
         onEditComplete?.();
       } else {
-        // Create a new transaction.
+        // Save a new expense.
         const savedExpense = await saveExpense(input);
 
         console.log(
@@ -258,6 +274,10 @@ export default function AddExpenseScreen({
           'Success',
           'Expense saved successfully!'
         );
+
+        // Notify App.tsx only after successful saving.
+        // App.tsx navigates Home and refreshes dashboard.
+        onSaveComplete?.();
       }
     } catch (error) {
       console.error(
@@ -278,7 +298,9 @@ export default function AddExpenseScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView 
+    style={styles.safeArea}
+    edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={
@@ -290,6 +312,7 @@ export default function AddExpenseScreen({
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           {/* Heading */}
@@ -321,7 +344,7 @@ export default function AddExpenseScreen({
             />
           </View>
 
-          {/* Payment method */}
+          {/* Payment Method */}
           <View style={styles.section}>
             <PaymentMethodSelector
               selectedMethodId={paymentMethodId}
@@ -339,7 +362,7 @@ export default function AddExpenseScreen({
             />
           </View>
 
-          {/* Date */}
+          {/* Transaction Date */}
           <View style={styles.section}>
             <TransactionDatePicker
               value={transactionDate}
@@ -365,10 +388,13 @@ export default function AddExpenseScreen({
               maxLength={300}
               accessibilityLabel="Expense notes"
               textAlignVertical="top"
+              returnKeyType="done"
+              blurOnSubmit
+              onSubmitEditing={() => Keyboard.dismiss()}
             />
           </View>
 
-          {/* Save or Update */}
+          {/* Save / Update */}
           <View style={styles.saveContainer}>
             <PrimaryButton
               title={
@@ -387,55 +413,67 @@ export default function AddExpenseScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+// Theme-aware styles.
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
 
-  flex: {
-    flex: 1,
-  },
+    flex: {
+      flex: 1,
+    },
 
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
-  },
+    content: {
+      flexGrow: 1,
+      width: '100%',
+      paddingHorizontal: layout.screenPadding,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.xxl,
+    },
 
-  heading: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.heading,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    marginBottom: spacing.xl,
-  },
+    heading: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.heading,
+      fontWeight: typography.weights.bold,
+      color: colors.text,
+      marginBottom: spacing.xl,
+    },
 
-  section: {
-    marginTop: spacing.xl,
-  },
+    section: {
+      width: '100%',
+      minWidth: 0,
+      marginTop: spacing.xl,
+    },
 
-  label: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    fontWeight: typography.weights.medium,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
+    label: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      fontWeight: typography.weights.medium,
+      color: colors.text,
+      marginBottom: spacing.sm,
+    },
 
-  notesInput: {
-    minHeight: 110,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.medium,
-    padding: spacing.lg,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.body,
-    color: colors.text,
-    backgroundColor: colors.surface,
-  },
+    notesInput: {
+      width: '100%',
+      minWidth: 0,
+      minHeight: 110,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.medium,
+      padding: spacing.lg,
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.body,
+      color: colors.text,
+      backgroundColor: colors.surface,
+      textAlignVertical: 'top',
+    },
 
-  saveContainer: {
-    marginTop: spacing.xxl,
-  },
-});
+    saveContainer: {
+      width: '100%',
+      marginTop: spacing.xxl,
+      paddingBottom: spacing.md,
+    },
+  });
+}
