@@ -1,20 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo } from "react";
 
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
 
 import {
   type ThemeColors,
   layout,
   radius,
   typography,
-} from '../constants/theme';
+} from "../constants/theme";
 
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme } from "../context/ThemeContext";
 
 interface PrimaryButtonProps {
   title: string;
@@ -31,10 +26,7 @@ export default function PrimaryButton({
 }: PrimaryButtonProps) {
   const { colors } = useAppTheme();
 
-  const styles = useMemo(
-    () => createStyles(colors),
-    [colors]
-  );
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const isDisabled = disabled || loading;
 
@@ -55,13 +47,9 @@ export default function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          color="#FFFFFF"
-        />
+        <ActivityIndicator color="#FFFFFF" />
       ) : (
-        <Text style={styles.buttonText}>
-          {title}
-        </Text>
+        <Text style={styles.buttonText}>{title}</Text>
       )}
     </Pressable>
   );
@@ -73,13 +61,13 @@ function createStyles(colors: ThemeColors) {
       height: layout.buttonHeight,
       backgroundColor: colors.primary,
       borderRadius: radius.large,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       paddingHorizontal: 16,
     },
 
     buttonText: {
-      color: '#FFFFFF',
+      color: "#FFFFFF",
       fontFamily: typography.fontFamily,
       fontSize: typography.sizes.body,
       fontWeight: typography.weights.semibold,

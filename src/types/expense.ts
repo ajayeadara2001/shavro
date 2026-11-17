@@ -1,4 +1,3 @@
-
 export interface Expense {
   id: string;
 
@@ -20,7 +19,4 @@ export interface Expense {
 }
 export type UpdateExpenseInput = CreateExpenseInput;
 
-export type CreateExpenseInput = Omit<
-  Expense,
-  'id' | 'createdAt'
->;
+export type CreateExpenseInput = Omit<Expense, "id" | "createdAt">;

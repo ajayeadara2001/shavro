@@ -1,7 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from "react";
 
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -9,26 +10,19 @@ import {
   Text,
   TextInput,
   View,
-  Keyboard
-} from 'react-native';
+} from "react-native";
 
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import AmountInput from '../components/AmountInput';
-import CategorySelector from '../components/CategorySelector';
-import PaymentMethodSelector from '../components/PaymentMethodSelector';
-import PrimaryButton from '../components/PrimaryButton';
-import TransactionDatePicker from '../components/TransactionDatePicker';
+import AmountInput from "../components/AmountInput";
+import CategorySelector from "../components/CategorySelector";
+import PaymentMethodSelector from "../components/PaymentMethodSelector";
+import PrimaryButton from "../components/PrimaryButton";
+import TransactionDatePicker from "../components/TransactionDatePicker";
 
-import {
-  saveExpense,
-  updateExpense,
-} from '../services/expenseStorage';
+import { saveExpense, updateExpense } from "../services/expenseStorage";
 
-import type {
-  Expense,
-  CreateExpenseInput,
-} from '../types/expense';
+import type { Expense, CreateExpenseInput } from "../types/expense";
 
 import {
   type ThemeColors,
@@ -36,24 +30,19 @@ import {
   spacing,
   typography,
   layout,
-} from '../constants/theme';
+} from "../constants/theme";
 
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme } from "../context/ThemeContext";
 
 interface AddExpenseScreenProps {
   expenseToEdit?: Expense | null;
   onEditComplete?: () => void;
-
-  // Called after successfully saving a new expense.
   onSaveComplete?: () => void;
 }
 
-function showMessage(
-  title: string,
-  message: string
-): void {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined') {
+function showMessage(title: string, message: string): void {
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined") {
       window.alert(`${title}\n\n${message}`);
     }
     return;
@@ -64,14 +53,14 @@ function showMessage(
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
 function parseTransactionDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
+  const [year, month, day] = value.split("-").map(Number);
 
   return new Date(year, month - 1, day);
 }
@@ -83,59 +72,51 @@ export default function AddExpenseScreen({
 }: AddExpenseScreenProps) {
   const { colors } = useAppTheme();
 
-  const styles = useMemo(
-    () => createStyles(colors),
-    [colors]
-  );
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const isEditing = expenseToEdit !== null;
 
   const [amount, setAmount] = useState(
-    expenseToEdit ? String(expenseToEdit.amount) : ''
+    expenseToEdit ? String(expenseToEdit.amount) : "",
   );
 
-  const [categoryId, setCategoryId] =
-    useState<string | null>(
-      expenseToEdit?.categoryId ?? null
-    );
-
-  const [otherExpenseName, setOtherExpenseName] =
-    useState(expenseToEdit?.expenseName ?? '');
-
-  const [paymentMethodId, setPaymentMethodId] =
-    useState<string | null>(
-      expenseToEdit?.paymentMethodId ?? null
-    );
-
-  const [otherMethodName, setOtherMethodName] =
-    useState(expenseToEdit?.otherMethodName ?? '');
-
-  const [transactionDate, setTransactionDate] =
-    useState<Date>(() =>
-      expenseToEdit
-        ? parseTransactionDate(
-          expenseToEdit.transactionDate
-        )
-        : new Date()
-    );
-
-  const [notes, setNotes] = useState(
-    expenseToEdit?.notes ?? ''
+  const [categoryId, setCategoryId] = useState<string | null>(
+    expenseToEdit?.categoryId ?? null,
   );
+
+  const [otherExpenseName, setOtherExpenseName] = useState(
+    expenseToEdit?.expenseName ?? "",
+  );
+
+  const [paymentMethodId, setPaymentMethodId] = useState<string | null>(
+    expenseToEdit?.paymentMethodId ?? null,
+  );
+
+  const [otherMethodName, setOtherMethodName] = useState(
+    expenseToEdit?.otherMethodName ?? "",
+  );
+
+  const [transactionDate, setTransactionDate] = useState<Date>(() =>
+    expenseToEdit
+      ? parseTransactionDate(expenseToEdit.transactionDate)
+      : new Date(),
+  );
+
+  const [notes, setNotes] = useState(expenseToEdit?.notes ?? "");
 
   const [saving, setSaving] = useState(false);
 
-  // Prevent multiple save requests from rapid taps.
+  // Prevent duplicate save requests.
   const savingRef = useRef(false);
 
   const resetForm = (): void => {
-    setAmount('');
+    setAmount("");
     setCategoryId(null);
-    setOtherExpenseName('');
+    setOtherExpenseName("");
     setPaymentMethodId(null);
-    setOtherMethodName('');
+    setOtherMethodName("");
     setTransactionDate(new Date());
-    setNotes('');
+    setNotes("");
   };
 
   const handleSave = async (): Promise<void> => {
@@ -152,87 +133,75 @@ export default function AddExpenseScreen({
       numericAmount <= 0
     ) {
       showMessage(
-        'Invalid Amount',
-        'Please enter an amount greater than zero.'
+        "Invalid Amount",
+        "Please enter an amount greater than zero.",
       );
       return;
     }
 
-    // Validate expense category.
+    // Validate selected category.
+    // Both built-in and custom IDs are valid.
     if (!categoryId) {
+      showMessage("Category Required", "Please select an expense category.");
+      return;
+    }
+
+    // The manual name is required only
+    // when the built-in Other option is used.
+    if (categoryId === "other" && !otherExpenseName.trim()) {
       showMessage(
-        'Category Required',
-        'Please select an expense category.'
+        "Expense Name Required",
+        "Please enter a name for your expense.",
       );
       return;
     }
 
-    // Validate custom category name.
-    if (
-      categoryId === 'other' &&
-      !otherExpenseName.trim()
-    ) {
-      showMessage(
-        'Expense Name Required',
-        'Please enter a name for your expense.'
-      );
-      return;
-    }
-
-    // Validate payment method.
+    // Validate selected payment method.
+    // Both built-in and saved custom IDs
+    // are valid.
     if (!paymentMethodId) {
-      showMessage(
-        'Payment Method Required',
-        'Please select a payment method.'
-      );
+      showMessage("Payment Method Required", "Please select a payment method.");
       return;
     }
 
-    // Validate custom payment method.
-    if (
-      paymentMethodId === 'other' &&
-      !otherMethodName.trim()
-    ) {
-      showMessage(
-        'Payment Type Required',
-        'Please enter your payment type.'
-      );
+    // Require a manually entered method
+    // name only for the Other option.
+    if (paymentMethodId === "other" && !otherMethodName.trim()) {
+      showMessage("Payment Type Required", "Please enter your payment type.");
       return;
     }
 
     // Validate transaction date.
     if (Number.isNaN(transactionDate.getTime())) {
-      showMessage(
-        'Invalid Date',
-        'Please select a valid transaction date.'
-      );
+      showMessage("Invalid Date", "Please select a valid transaction date.");
       return;
     }
 
     const selectedDate = formatLocalDate(transactionDate);
+
     const today = formatLocalDate(new Date());
 
     if (selectedDate > today) {
-      showMessage(
-        'Invalid Date',
-        'Future transaction dates are not allowed.'
-      );
+      showMessage("Invalid Date", "Future transaction dates are not allowed.");
       return;
     }
 
+    // Preserve custom category and payment IDs.
+    // Manual names apply only to Other.
     const input: CreateExpenseInput = {
       amount: numericAmount,
+
       categoryId,
-      expenseName:
-        categoryId === 'other'
-          ? otherExpenseName.trim()
-          : null,
+
+      expenseName: categoryId === "other" ? otherExpenseName.trim() : null,
+
       paymentMethodId,
+
       otherMethodName:
-        paymentMethodId === 'other'
-          ? otherMethodName.trim()
-          : null,
+        paymentMethodId === "other" ? otherMethodName.trim() : null,
+
       transactionDate: selectedDate,
+
       notes: notes.trim(),
     };
 
@@ -241,55 +210,34 @@ export default function AddExpenseScreen({
 
     try {
       if (expenseToEdit) {
-        // Update an existing expense.
-        const updatedExpense = await updateExpense(
-          expenseToEdit.id,
-          input
-        );
+        // Update existing expense.
+        const updatedExpense = await updateExpense(expenseToEdit.id, input);
 
-        console.log(
-          'Expense updated:',
-          updatedExpense
-        );
+        console.log("Expense updated:", updatedExpense);
 
-        showMessage(
-          'Success',
-          'Expense updated successfully!'
-        );
+        showMessage("Success", "Expense updated successfully!");
 
-        // App.tsx navigates to Home and refreshes.
         onEditComplete?.();
       } else {
-        // Save a new expense.
+        // Save new expense.
         const savedExpense = await saveExpense(input);
 
-        console.log(
-          'Expense saved:',
-          savedExpense
-        );
+        console.log("Expense saved:", savedExpense);
 
         resetForm();
 
-        showMessage(
-          'Success',
-          'Expense saved successfully!'
-        );
+        showMessage("Success", "Expense saved successfully!");
 
-        // Notify App.tsx only after successful saving.
-        // App.tsx navigates Home and refreshes dashboard.
         onSaveComplete?.();
       }
     } catch (error) {
-      console.error(
-        'Expense save/update failed:',
-        error
-      );
+      console.error("Expense save/update failed:", error);
 
       showMessage(
-        isEditing ? 'Update Failed' : 'Save Failed',
+        isEditing ? "Update Failed" : "Save Failed",
         isEditing
-          ? 'Unable to update your expense. Please try again.'
-          : 'Unable to save your expense. Please try again.'
+          ? "Unable to update your expense. Please try again."
+          : "Unable to save your expense. Please try again.",
       );
     } finally {
       savingRef.current = false;
@@ -298,16 +246,10 @@ export default function AddExpenseScreen({
   };
 
   return (
-    <SafeAreaView 
-    style={styles.safeArea}
-    edges={['bottom', 'left', 'right']}>
+    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : undefined
-        }
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           contentContainerStyle={styles.content}
@@ -317,52 +259,33 @@ export default function AddExpenseScreen({
         >
           {/* Heading */}
           <Text style={styles.heading}>
-            {isEditing ? 'Edit Expense' : 'Add Expense'}
+            {isEditing ? "Edit Expense" : "Add Expense"}
           </Text>
 
           {/* Amount */}
-          <AmountInput
-            value={amount}
-            onChangeValue={setAmount}
-          />
+          <AmountInput value={amount} onChangeValue={setAmount} />
 
-          {/* Category */}
+          {/* Expense category */}
           <View style={styles.section}>
             <CategorySelector
               selectedCategoryId={categoryId}
               onSelectCategory={setCategoryId}
-              onAddCategory={() =>
-                showMessage(
-                  'Coming Soon',
-                  'Creating reusable expense categories will be available soon.'
-                )
-              }
               otherExpenseName={otherExpenseName}
-              onOtherExpenseNameChange={
-                setOtherExpenseName
-              }
+              onOtherExpenseNameChange={setOtherExpenseName}
             />
           </View>
 
-          {/* Payment Method */}
+          {/* Payment method */}
           <View style={styles.section}>
             <PaymentMethodSelector
               selectedMethodId={paymentMethodId}
               onSelectMethod={setPaymentMethodId}
-              onAddMethod={() =>
-                showMessage(
-                  'Coming Soon',
-                  'Creating reusable payment methods will be available soon.'
-                )
-              }
               otherMethodName={otherMethodName}
-              onOtherMethodNameChange={
-                setOtherMethodName
-              }
+              onOtherMethodNameChange={setOtherMethodName}
             />
           </View>
 
-          {/* Transaction Date */}
+          {/* Transaction date */}
           <View style={styles.section}>
             <TransactionDatePicker
               value={transactionDate}
@@ -372,18 +295,14 @@ export default function AddExpenseScreen({
 
           {/* Notes */}
           <View style={styles.section}>
-            <Text style={styles.label}>
-              Notes (optional)
-            </Text>
+            <Text style={styles.label}>Notes (optional)</Text>
 
             <TextInput
               style={styles.notesInput}
               value={notes}
               onChangeText={setNotes}
               placeholder="Add a note about this expense"
-              placeholderTextColor={
-                colors.textSecondary
-              }
+              placeholderTextColor={colors.textSecondary}
               multiline
               maxLength={300}
               accessibilityLabel="Expense notes"
@@ -397,11 +316,7 @@ export default function AddExpenseScreen({
           {/* Save / Update */}
           <View style={styles.saveContainer}>
             <PrimaryButton
-              title={
-                isEditing
-                  ? 'Update Expense'
-                  : 'Save Expense'
-              }
+              title={isEditing ? "Update Expense" : "Save Expense"}
               onPress={handleSave}
               loading={saving}
               disabled={saving}
@@ -427,7 +342,7 @@ function createStyles(colors: ThemeColors) {
 
     content: {
       flexGrow: 1,
-      width: '100%',
+      width: "100%",
       paddingHorizontal: layout.screenPadding,
       paddingTop: spacing.xl,
       paddingBottom: spacing.xxl,
@@ -442,7 +357,7 @@ function createStyles(colors: ThemeColors) {
     },
 
     section: {
-      width: '100%',
+      width: "100%",
       minWidth: 0,
       marginTop: spacing.xl,
     },
@@ -456,7 +371,7 @@ function createStyles(colors: ThemeColors) {
     },
 
     notesInput: {
-      width: '100%',
+      width: "100%",
       minWidth: 0,
       minHeight: 110,
       borderWidth: 1,
@@ -467,11 +382,11 @@ function createStyles(colors: ThemeColors) {
       fontSize: typography.sizes.body,
       color: colors.text,
       backgroundColor: colors.surface,
-      textAlignVertical: 'top',
+      textAlignVertical: "top",
     },
 
     saveContainer: {
-      width: '100%',
+      width: "100%",
       marginTop: spacing.xxl,
       paddingBottom: spacing.md,
     },

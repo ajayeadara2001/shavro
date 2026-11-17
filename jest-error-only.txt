@@ -1,0 +1,181 @@
+npx.cmd 
+: PASS s
+rc/servi
+ces/__te
+sts__/ba
+ckupRest
+oreWrite
+.web.tes
+t.ts
+At 
+line:1 
+char:1
++ 
+npx.cmd 
+jest --r
+unInBand
+ --no-ca
+che 
+2>&1 | O
+ut-File 
+-FilePat
+h 
+.\jest- 
+...
++ ~~~~~~
+~~~~~~~~
+~~~~~~~~
+~~~~~~~~
+~~~~~~~~
+~~
+    + C 
+   ate  
+  gor   
+ yIn    
+fo      
+        
+        
+    : N 
+   otS  
+  pec   
+ ifi    
+ed:     
+(P    
+ASS     
+sr    
+c/s    
+erv    
+ic.    
+..i    
+te.    
+web    
+.te    
+st.    
+ts:    
+Str    
+ing    
+) [    
+],     
+Rem    
+ote    
+Exc    
+ept    
+ion
+    + F 
+   ull  
+  yQu   
+ ali    
+fie    
+dEr    
+ror    
+Id     
+: N    
+ati    
+veC    
+omm    
+and    
+Err    
+or
+ 
+FAIL src
+/service
+s/__test
+s__/back
+upRestor
+eWrite.t
+est.ts
+  GùÅ 
+Shavro p
+rotected
+ 
+restore 
+GÇ¦ reco
+vers ori
+ginal 
+data 
+when 
+journal 
+and comp
+letion 
+marker 
+both 
+exist
+
+    
+Tests 
+cannot 
+be 
+nested. 
+Test "su
+ccessful
+ 
+restore 
+retains 
+a commit
+ted inte
+grity 
+record" 
+cannot 
+run 
+because 
+it is 
+nested 
+within "
+recovers
+ origina
+l data 
+when 
+journal 
+and comp
+letion 
+marker 
+both 
+exist".
+
+    
+[0m 
+[90m 
+708 
+|[39m  
+   )[33
+m;[39m
+     
+[90m 
+709 
+|[39m
+    [31
+m[1m>[
+22m[39m
+[90m 
+710 
+|[39m  
+   test(
+[32m"su
+ccessful
+ 
+restore 
+retains 
+a commit
+ted inte
+grity re
+cord"[3
+9m[33m,
+[39m [
+36masync
+[39m 
+() [33m
+=>[39m 
+{
+     
+[90m   
+  
+|[39m  
+       
+[31m[1m
+^[22m[
+39m
+     
+[90m 
+711 
+|[39m  
+     [3

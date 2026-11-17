@@ -1,177 +1,202 @@
-
 import type {
   Expense,
   CreateExpenseInput,
   UpdateExpenseInput,
-} from '../types/expense';
+} from "../types/expense";
 
-const STORAGE_KEY = 'shavro_expenses_v1';
-const LEGACY_STORAGE_KEY = 'expenseflow_expenses_v1';
+import { runFinancialWrite } from "./storageOperationGuard";
+
+const STORAGE_KEY = "shavro_expenses_v1";
+
+// =========================================
+// EXPENSE VALIDATION
+// =========================================
 
 function isExpense(value: unknown): value is Expense {
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== "object") {
     return false;
   }
 
   const item = value as Record<string, unknown>;
 
   return (
-    typeof item.id === 'string' &&
-    typeof item.amount === 'number' &&
+    typeof item.id === "string" &&
+    typeof item.amount === "number" &&
     Number.isFinite(item.amount) &&
     item.amount > 0 &&
-    typeof item.categoryId === 'string' &&
-    (item.expenseName === null ||
-      typeof item.expenseName === 'string') &&
-    typeof item.paymentMethodId === 'string' &&
+    typeof item.categoryId === "string" &&
+    (item.expenseName === null || typeof item.expenseName === "string") &&
+    typeof item.paymentMethodId === "string" &&
     (item.otherMethodName === null ||
-      typeof item.otherMethodName === 'string') &&
-    typeof item.transactionDate === 'string' &&
-    typeof item.notes === 'string' &&
-    typeof item.createdAt === 'string'
+      typeof item.otherMethodName === "string") &&
+    typeof item.transactionDate === "string" &&
+    typeof item.notes === "string" &&
+    typeof item.createdAt === "string"
   );
 }
 
-function generateId(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID();
-  }
+// =========================================
+// ID GENERATION
+// =========================================
 
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function generateId(): string {
+  return (
+    `${Date.now()}-` +
+    Math.random().toString(36).slice(2) +
+    Math.random().toString(36).slice(2)
+  );
 }
 
+// =========================================
+// READ EXPENSES
+// =========================================
+
+/**
+ * Read expenses from browser storage.
+ *
+ * This function is intentionally read-only.
+ *
+ * It may be called inside runFinancialWrite().
+ * Never acquire a nested financial write lock.
+ */
 export async function getExpenses(): Promise<Expense[]> {
   try {
-    let stored = window.localStorage.getItem(STORAGE_KEY);
+    const stored = window.localStorage.getItem(STORAGE_KEY);
 
     if (stored === null) {
-      const legacyData = window.localStorage.getItem(
-        LEGACY_STORAGE_KEY
-      );
-
-      if (legacyData !== null) {
-        const parsed: unknown = JSON.parse(legacyData);
-
-        if (!Array.isArray(parsed) || !parsed.every(isExpense)) {
-          throw new Error('Legacy expenses contain invalid data.');
-        }
-
-        window.localStorage.setItem(STORAGE_KEY, legacyData);
-        stored = legacyData;
-      }
-    }
-
-    if (!stored) {
       return [];
     }
 
     const parsed: unknown = JSON.parse(stored);
 
-    if (!Array.isArray(parsed)) {
-      throw new Error('Stored expenses must be an array.');
-    }
-
-    if (!parsed.every(isExpense)) {
-      throw new Error('Stored expenses contain invalid data.');
+    if (!Array.isArray(parsed) || !parsed.every(isExpense)) {
+      throw new Error("Stored expenses contain invalid data.");
     }
 
     return parsed;
   } catch (error) {
-    console.error('Failed to read expenses:', error);
-    throw new Error('Unable to load saved expenses.');
+    console.error("Failed to read expenses:", error);
+
+    throw new Error("Unable to load saved expenses.");
   }
 }
 
-export async function saveExpense(
-  input: CreateExpenseInput
-): Promise<Expense> {
-  const expenses = await getExpenses();
+// =========================================
+// SAVE EXPENSE
+// =========================================
 
-  const expense: Expense = {
-    ...input,
-    id: generateId(),
-    createdAt: new Date().toISOString(),
-  };
+/**
+ * Protect the complete read-modify-write
+ * sequence using the financial coordinator.
+ *
+ * Web financial locking is handled by
+ * runFinancialWrite().
+ */
+export async function saveExpense(input: CreateExpenseInput): Promise<Expense> {
+  return runFinancialWrite(async () => {
+    const expenses = await getExpenses();
 
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify([expense, ...expenses])
-    );
+    const expense: Expense = {
+      ...input,
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    };
 
-    return expense;
-  } catch (error) {
-    console.error('Failed to save expense:', error);
-    throw new Error('Unable to save expense.');
-  }
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify([expense, ...expenses]),
+      );
+
+      return expense;
+    } catch (error) {
+      console.error("Failed to save expense:", error);
+
+      throw new Error("Unable to save expense.");
+    }
+  });
 }
 
+// =========================================
+// UPDATE EXPENSE
+// =========================================
 
+/**
+ * Update an existing expense without
+ * changing its original ID or createdAt.
+ *
+ * Both the initial read and final write
+ * are performed inside the same guard.
+ */
 export async function updateExpense(
   id: string,
-  changes: UpdateExpenseInput
+  changes: UpdateExpenseInput,
 ): Promise<Expense> {
-  const expenses = await getExpenses();
+  return runFinancialWrite(async () => {
+    const expenses = await getExpenses();
 
-  const index = expenses.findIndex(
-    (expense) => expense.id === id
-  );
+    const index = expenses.findIndex((expense) => expense.id === id);
 
-  if (index === -1) {
-    throw new Error('Expense not found.');
-  }
+    if (index === -1) {
+      throw new Error("Expense not found.");
+    }
 
-  const updatedExpense: Expense = {
-    ...expenses[index],
-    ...changes,
-    id: expenses[index].id,
-    createdAt: expenses[index].createdAt,
-  };
+    const existingExpense = expenses[index];
 
-  const updatedExpenses = [...expenses];
-  updatedExpenses[index] = updatedExpense;
+    const updatedExpense: Expense = {
+      ...existingExpense,
+      ...changes,
 
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(updatedExpenses)
-    );
+      id: existingExpense.id,
+      createdAt: existingExpense.createdAt,
+    };
 
-    return updatedExpense;
-  } catch (error) {
-    console.error('Failed to update expense:', error);
-    throw new Error('Unable to update expense.');
-  }
+    const updatedExpenses = [...expenses];
+
+    updatedExpenses[index] = updatedExpense;
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedExpenses));
+
+      return updatedExpense;
+    } catch (error) {
+      console.error("Failed to update expense:", error);
+
+      throw new Error("Unable to update expense.");
+    }
+  });
 }
 
-export async function deleteExpense(
-  id: string
-): Promise<void> {
-  const expenses = await getExpenses();
+// =========================================
+// DELETE EXPENSE
+// =========================================
 
-  const exists = expenses.some(
-    (expense) => expense.id === id
-  );
+/**
+ * Delete an expense using the shared
+ * financial write coordinator.
+ *
+ * The existence check and deletion are
+ * performed inside one guarded operation.
+ */
+export async function deleteExpense(id: string): Promise<void> {
+  return runFinancialWrite(async () => {
+    const expenses = await getExpenses();
 
-  if (!exists) {
-    throw new Error('Expense not found.');
-  }
+    if (!expenses.some((expense) => expense.id === id)) {
+      throw new Error("Expense not found.");
+    }
 
-  const remainingExpenses = expenses.filter(
-    (expense) => expense.id !== id
-  );
+    const remainingExpenses = expenses.filter((expense) => expense.id !== id);
 
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(remainingExpenses)
-    );
-  } catch (error) {
-    console.error('Failed to delete expense:', error);
-    throw new Error('Unable to delete expense.');
-  }
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(remainingExpenses),
+      );
+    } catch (error) {
+      console.error("Failed to delete expense:", error);
+
+      throw new Error("Unable to delete expense.");
+    }
+  });
 }
-

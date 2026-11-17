@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from "react";
 
 import {
   InputAccessoryView,
@@ -9,16 +9,16 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
+} from "react-native";
 
 import {
   type ThemeColors,
   radius,
   spacing,
   typography,
-} from '../constants/theme';
+} from "../constants/theme";
 
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme } from "../context/ThemeContext";
 
 interface AmountInputProps {
   value: string;
@@ -29,21 +29,18 @@ interface AmountInputProps {
 export default function AmountInput({
   value,
   onChangeValue,
-  currencySymbol = '₹',
+  currencySymbol = "₹",
 }: AmountInputProps) {
   const { colors } = useAppTheme();
 
-  const styles = useMemo(
-    () => createStyles(colors),
-    [colors]
-  );
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [accessoryId] = useState(
-    () => `shavro-amount-${Math.random().toString(36).slice(2)}`
+    () => `shavro-amount-${Math.random().toString(36).slice(2)}`,
   );
 
   const handleAmountChange = (text: string): void => {
-    const cleaned = text.replace(/[^0-9.]/g, '');
+    const cleaned = text.replace(/[^0-9.]/g, "");
 
     // Allow one decimal point and two decimal places.
     if (/^\d*(\.\d{0,2})?$/.test(cleaned)) {
@@ -57,14 +54,10 @@ export default function AmountInput({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>
-        Amount
-      </Text>
+      <Text style={styles.label}>Amount</Text>
 
       <View style={styles.inputRow}>
-        <Text style={styles.currency}>
-          {currencySymbol}
-        </Text>
+        <Text style={styles.currency}>{currencySymbol}</Text>
 
         <TextInput
           style={styles.input}
@@ -73,11 +66,7 @@ export default function AmountInput({
           keyboardType="decimal-pad"
           returnKeyType="done"
           onSubmitEditing={dismissKeyboard}
-          inputAccessoryViewID={
-            Platform.OS === 'ios'
-              ? accessoryId
-              : undefined
-          }
+          inputAccessoryViewID={Platform.OS === "ios" ? accessoryId : undefined}
           placeholder="0"
           placeholderTextColor={colors.textSecondary}
           maxLength={12}
@@ -87,7 +76,7 @@ export default function AmountInput({
       </View>
 
       {/* iOS numeric keyboard toolbar */}
-      {Platform.OS === 'ios' && (
+      {Platform.OS === "ios" && (
         <InputAccessoryView nativeID={accessoryId}>
           <View style={styles.keyboardToolbar}>
             <Pressable
@@ -96,9 +85,7 @@ export default function AmountInput({
               accessibilityLabel="Done entering amount"
               style={styles.doneButton}
             >
-              <Text style={styles.doneText}>
-                Done
-              </Text>
+              <Text style={styles.doneText}>Done</Text>
             </Pressable>
           </View>
         </InputAccessoryView>
@@ -110,7 +97,7 @@ export default function AmountInput({
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: {
-      width: '100%',
+      width: "100%",
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
@@ -127,8 +114,8 @@ function createStyles(colors: ThemeColors) {
     },
 
     inputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
     },
 
     currency: {
@@ -150,9 +137,9 @@ function createStyles(colors: ThemeColors) {
 
     keyboardToolbar: {
       minHeight: 48,
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      alignItems: 'center',
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      alignItems: "center",
       paddingHorizontal: spacing.lg,
       backgroundColor: colors.surface,
       borderTopWidth: 1,
@@ -162,8 +149,8 @@ function createStyles(colors: ThemeColors) {
     doneButton: {
       minWidth: 64,
       minHeight: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     doneText: {

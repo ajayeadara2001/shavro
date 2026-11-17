@@ -1,27 +1,23 @@
-
 import React, {
   createContext,
   useContext,
   useEffect,
   useMemo,
   useState,
-} from 'react';
+} from "react";
 
-import {
-  Platform,
-  useColorScheme,
-} from 'react-native';
+import { Platform, useColorScheme } from "react-native";
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
   getThemeColors,
   type ThemeColors,
   type ThemePreference,
   type ResolvedTheme,
-} from '../constants/theme';
+} from "../constants/theme";
 
-const THEME_STORAGE_KEY = 'shavro_theme_v1';
+const THEME_STORAGE_KEY = "shavro_theme_v1";
 
 interface ThemeContextValue {
   preference: ThemePreference;
@@ -31,29 +27,16 @@ interface ThemeContextValue {
   isDark: boolean;
 }
 
-const ThemeContext = createContext<
-  ThemeContextValue | undefined
->(undefined);
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-function isThemePreference(
-  value: string | null
-): value is ThemePreference {
-  return (
-    value === 'light' ||
-    value === 'dark' ||
-    value === 'system'
-  );
+function isThemePreference(value: string | null): value is ThemePreference {
+  return value === "light" || value === "dark" || value === "system";
 }
 
-export function ThemeProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useColorScheme();
 
-  const [preference, setPreferenceState] =
-    useState<ThemePreference>('light');
+  const [preference, setPreferenceState] = useState<ThemePreference>("light");
 
   const [loaded, setLoaded] = useState(false);
 
@@ -63,22 +46,15 @@ export function ThemeProvider({
     const loadPreference = async () => {
       try {
         const saved =
-          Platform.OS === 'web'
-            ? window.localStorage.getItem(
-              THEME_STORAGE_KEY
-            )
-            : await AsyncStorage.getItem(
-              THEME_STORAGE_KEY
-            );
+          Platform.OS === "web"
+            ? window.localStorage.getItem(THEME_STORAGE_KEY)
+            : await AsyncStorage.getItem(THEME_STORAGE_KEY);
 
         if (active && isThemePreference(saved)) {
           setPreferenceState(saved);
         }
       } catch (error) {
-        console.error(
-          'Unable to load theme preference:',
-          error
-        );
+        console.error("Unable to load theme preference:", error);
       } finally {
         if (active) {
           setLoaded(true);
@@ -93,9 +69,7 @@ export function ThemeProvider({
     };
   }, []);
 
-  const setPreference = (
-    value: ThemePreference
-  ): void => {
+  const setPreference = (value: ThemePreference): void => {
     setPreferenceState(value);
   };
 
@@ -104,22 +78,13 @@ export function ThemeProvider({
 
     const savePreference = async () => {
       try {
-        if (Platform.OS === 'web') {
-          window.localStorage.setItem(
-            THEME_STORAGE_KEY,
-            preference
-          );
+        if (Platform.OS === "web") {
+          window.localStorage.setItem(THEME_STORAGE_KEY, preference);
         } else {
-          await AsyncStorage.setItem(
-            THEME_STORAGE_KEY,
-            preference
-          );
+          await AsyncStorage.setItem(THEME_STORAGE_KEY, preference);
         }
       } catch (error) {
-        console.error(
-          'Unable to save theme preference:',
-          error
-        );
+        console.error("Unable to save theme preference:", error);
       }
     };
 
@@ -127,10 +92,10 @@ export function ThemeProvider({
   }, [preference, loaded]);
 
   const resolvedTheme: ResolvedTheme =
-    preference === 'system'
-      ? systemScheme === 'dark'
-        ? 'dark'
-        : 'light'
+    preference === "system"
+      ? systemScheme === "dark"
+        ? "dark"
+        : "light"
       : preference;
 
   const value = useMemo<ThemeContextValue>(
@@ -139,15 +104,13 @@ export function ThemeProvider({
       resolvedTheme,
       colors: getThemeColors(resolvedTheme),
       setPreference,
-      isDark: resolvedTheme === 'dark',
+      isDark: resolvedTheme === "dark",
     }),
-    [preference, resolvedTheme]
+    [preference, resolvedTheme],
   );
 
   return (
-    <ThemeContext.Provider value={value}>
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }
 
@@ -155,9 +118,7 @@ export function useAppTheme(): ThemeContextValue {
   const context = useContext(ThemeContext);
 
   if (!context) {
-    throw new Error(
-      'useAppTheme must be used inside ThemeProvider'
-    );
+    throw new Error("useAppTheme must be used inside ThemeProvider");
   }
 
   return context;

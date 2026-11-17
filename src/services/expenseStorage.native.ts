@@ -1,36 +1,35 @@
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type {
   Expense,
   CreateExpenseInput,
   UpdateExpenseInput,
-} from '../types/expense';
+} from "../types/expense";
 
-const STORAGE_KEY = 'shavro_expenses_v1';
-const LEGACY_STORAGE_KEY = 'expenseflow_expenses_v1';
+import { runFinancialWrite } from "./storageOperationGuard";
+
+const STORAGE_KEY = "shavro_expenses_v1";
 
 function isExpense(value: unknown): value is Expense {
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== "object") {
     return false;
   }
 
   const item = value as Record<string, unknown>;
 
   return (
-    typeof item.id === 'string' &&
-    typeof item.amount === 'number' &&
+    typeof item.id === "string" &&
+    typeof item.amount === "number" &&
     Number.isFinite(item.amount) &&
     item.amount > 0 &&
-    typeof item.categoryId === 'string' &&
-    (item.expenseName === null ||
-      typeof item.expenseName === 'string') &&
-    typeof item.paymentMethodId === 'string' &&
+    typeof item.categoryId === "string" &&
+    (item.expenseName === null || typeof item.expenseName === "string") &&
+    typeof item.paymentMethodId === "string" &&
     (item.otherMethodName === null ||
-      typeof item.otherMethodName === 'string') &&
-    typeof item.transactionDate === 'string' &&
-    typeof item.notes === 'string' &&
-    typeof item.createdAt === 'string'
+      typeof item.otherMethodName === "string") &&
+    typeof item.transactionDate === "string" &&
+    typeof item.notes === "string" &&
+    typeof item.createdAt === "string"
   );
 }
 
@@ -42,133 +41,122 @@ function generateId(): string {
   );
 }
 
+/**
+ * Read expenses without modifying storage.
+ *
+ * This function is also called inside
+ * runFinancialWrite(), so it must not
+ * acquire another write reservation.
+ */
 export async function getExpenses(): Promise<Expense[]> {
   try {
-    let stored = await AsyncStorage.getItem(STORAGE_KEY);
+    const stored = await AsyncStorage.getItem(STORAGE_KEY);
 
     if (stored === null) {
-      const legacyData = await AsyncStorage.getItem(
-        LEGACY_STORAGE_KEY
-      );
-
-      if (legacyData !== null) {
-        const parsed: unknown = JSON.parse(legacyData);
-
-        if (!Array.isArray(parsed) || !parsed.every(isExpense)) {
-          throw new Error('Legacy expenses contain invalid data.');
-        }
-
-        await AsyncStorage.setItem(STORAGE_KEY, legacyData);
-        stored = legacyData;
-      }
-    }
-    if (!stored) {
       return [];
     }
 
     const parsed: unknown = JSON.parse(stored);
 
-    if (!Array.isArray(parsed)) {
-      throw new Error('Stored expenses must be an array.');
-    }
-
-    if (!parsed.every(isExpense)) {
-      throw new Error('Stored expenses contain invalid data.');
+    if (!Array.isArray(parsed) || !parsed.every(isExpense)) {
+      throw new Error("Stored expenses contain invalid data.");
     }
 
     return parsed;
   } catch (error) {
-    console.error('Failed to read expenses:', error);
-    throw new Error('Unable to load saved expenses.');
+    console.error("Failed to read expenses:", error);
+    throw new Error("Unable to load saved expenses.");
   }
 }
 
-export async function saveExpense(
-  input: CreateExpenseInput
-): Promise<Expense> {
-  const expenses = await getExpenses();
+/**
+ * Save an expense using a serialized
+ * read-modify-write operation.
+ */
+export async function saveExpense(input: CreateExpenseInput): Promise<Expense> {
+  return runFinancialWrite(async () => {
+    const expenses = await getExpenses();
 
-  const expense: Expense = {
-    ...input,
-    id: generateId(),
-    createdAt: new Date().toISOString(),
-  };
+    const expense: Expense = {
+      ...input,
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    };
 
-  try {
-    await AsyncStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify([expense, ...expenses])
-    );
+    try {
+      await AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify([expense, ...expenses]),
+      );
 
-    return expense;
-  } catch (error) {
-    console.error('Failed to save expense:', error);
-    throw new Error('Unable to save expense.');
-  }
+      return expense;
+    } catch (error) {
+      console.error("Failed to save expense:", error);
+      throw new Error("Unable to save expense.");
+    }
+  });
 }
 
-
+/**
+ * Update an existing expense while
+ * preserving its ID and creation time.
+ */
 export async function updateExpense(
   id: string,
-  changes: UpdateExpenseInput
+  changes: UpdateExpenseInput,
 ): Promise<Expense> {
-  const expenses = await getExpenses();
+  return runFinancialWrite(async () => {
+    const expenses = await getExpenses();
 
-  const index = expenses.findIndex(
-    (expense) => expense.id === id
-  );
+    const index = expenses.findIndex((expense) => expense.id === id);
 
-  if (index === -1) {
-    throw new Error('Expense not found.');
-  }
+    if (index === -1) {
+      throw new Error("Expense not found.");
+    }
 
-  const updatedExpense: Expense = {
-    ...expenses[index],
-    ...changes,
-    id: expenses[index].id,
-    createdAt: expenses[index].createdAt,
-  };
+    const updatedExpense: Expense = {
+      ...expenses[index],
+      ...changes,
+      id: expenses[index].id,
+      createdAt: expenses[index].createdAt,
+    };
 
-  const updatedExpenses = [...expenses];
-  updatedExpenses[index] = updatedExpense;
+    const updatedExpenses = [...expenses];
+    updatedExpenses[index] = updatedExpense;
 
-  try {
-    await AsyncStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(updatedExpenses)
-    );
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedExpenses));
 
-    return updatedExpense;
-  } catch (error) {
-    console.error('Failed to update expense:', error);
-    throw new Error('Unable to update expense.');
-  }
+      return updatedExpense;
+    } catch (error) {
+      console.error("Failed to update expense:", error);
+      throw new Error("Unable to update expense.");
+    }
+  });
 }
 
-export async function deleteExpense(
-  id: string
-): Promise<void> {
-  const expenses = await getExpenses();
+/**
+ * Delete an expense using the shared
+ * financial write coordinator.
+ */
+export async function deleteExpense(id: string): Promise<void> {
+  return runFinancialWrite(async () => {
+    const expenses = await getExpenses();
 
-  const exists = expenses.some(
-    (expense) => expense.id === id
-  );
+    if (!expenses.some((expense) => expense.id === id)) {
+      throw new Error("Expense not found.");
+    }
 
-  if (!exists) {
-    throw new Error('Expense not found.');
-  }
+    const remainingExpenses = expenses.filter((expense) => expense.id !== id);
 
-  const remainingExpenses = expenses.filter(
-    (expense) => expense.id !== id
-  );
-
-  try {
-    await AsyncStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(remainingExpenses)
-    );
-  } catch (error) {
-    console.error('Failed to delete expense:', error);
-    throw new Error('Unable to delete expense.');
-  }
+    try {
+      await AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(remainingExpenses),
+      );
+    } catch (error) {
+      console.error("Failed to delete expense:", error);
+      throw new Error("Unable to delete expense.");
+    }
+  });
 }

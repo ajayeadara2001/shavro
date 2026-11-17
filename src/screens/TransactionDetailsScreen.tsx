@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 
 import {
   Alert,
@@ -8,9 +8,9 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
+} from "react-native";
 
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   ArrowLeft,
@@ -20,20 +20,31 @@ import {
   Pencil,
   Tag,
   Trash2,
-} from 'lucide-react-native';
+} from "lucide-react-native";
 
-import type { Expense } from '../types/expense';
-import { deleteExpense } from '../services/expenseStorage';
-import { formatINR } from '../utils/money';
+import type { Expense } from "../types/expense";
+
+import { deleteExpense } from "../services/expenseStorage";
+
+import { formatINR } from "../utils/money";
+
+import {
+  EMPTY_CUSTOM_OPTION_LABELS,
+  getExpenseCategoryLabel,
+  getExpensePaymentLabel,
+  loadCustomOptionLabels,
+  type CustomOptionLabels,
+} from "../utils/customOptionLabels";
+
 import {
   type ThemeColors,
   layout,
   radius,
   spacing,
   typography,
-} from '../constants/theme';
+} from "../constants/theme";
 
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme } from "../context/ThemeContext";
 
 interface TransactionDetailsScreenProps {
   expense: Expense;
@@ -43,10 +54,11 @@ interface TransactionDetailsScreenProps {
 }
 
 function showMessage(title: string, message: string): void {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined') {
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined") {
       window.alert(`${title}\n\n${message}`);
     }
+
     return;
   }
 
@@ -54,82 +66,51 @@ function showMessage(title: string, message: string): void {
 }
 
 function confirmDeletion(): Promise<boolean> {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     return Promise.resolve(
-      typeof window !== 'undefined' &&
-      window.confirm(
-        'Delete this expense?\n\nThis action cannot be undone.'
-      )
+      typeof window !== "undefined" &&
+        window.confirm("Delete this expense?\n\nThis action cannot be undone."),
     );
   }
 
   return new Promise((resolve) => {
     Alert.alert(
-      'Delete Expense',
-      'Are you sure you want to delete this expense? This action cannot be undone.',
+      "Delete Expense",
+      "Are you sure you want to delete this expense? This action cannot be undone.",
       [
         {
-          text: 'Cancel',
-          style: 'cancel',
+          text: "Cancel",
+          style: "cancel",
           onPress: () => resolve(false),
         },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: () => resolve(true),
         },
       ],
       {
         cancelable: true,
         onDismiss: () => resolve(false),
-      }
+      },
     );
   });
 }
 
 function formatDate(value: string): string {
-  const [year, month, day] = value.split('-').map(Number);
+  const [year, month, day] = value.split("-").map(Number);
+
   const date = new Date(year, month - 1, day);
 
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   });
-}
-
-function formatName(value: string): string {
-  return value
-    .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, (character) =>
-      character.toUpperCase()
-    );
-}
-
-function getCategory(expense: Expense): string {
-  return expense.categoryId === 'other' &&
-    expense.expenseName
-    ? expense.expenseName
-    : formatName(expense.categoryId);
-}
-
-function getPaymentMethod(expense: Expense): string {
-  if (
-    expense.paymentMethodId === 'other' &&
-    expense.otherMethodName
-  ) {
-    return expense.otherMethodName;
-  }
-
-  if (expense.paymentMethodId === 'upi') {
-    return 'UPI';
-  }
-
-  return formatName(expense.paymentMethodId);
 }
 
 type DetailStyles = ReturnType<typeof createStyles>;
@@ -141,26 +122,15 @@ interface DetailRowProps {
   styles: DetailStyles;
 }
 
-function DetailRow({
-  icon,
-  label,
-  value,
-  styles,
-}: DetailRowProps) {
+function DetailRow({ icon, label, value, styles }: DetailRowProps) {
   return (
     <View style={styles.detailRow}>
-      <View style={styles.detailIcon}>
-        {icon}
-      </View>
+      <View style={styles.detailIcon}>{icon}</View>
 
       <View style={styles.detailContent}>
-        <Text style={styles.detailLabel}>
-          {label}
-        </Text>
+        <Text style={styles.detailLabel}>{label}</Text>
 
-        <Text style={styles.detailValue}>
-          {value}
-        </Text>
+        <Text style={styles.detailValue}>{value}</Text>
       </View>
     </View>
   );
@@ -174,19 +144,71 @@ export default function TransactionDetailsScreen({
 }: TransactionDetailsScreenProps) {
   const { colors } = useAppTheme();
 
-  const styles = useMemo(
-    () => createStyles(colors),
-    [colors]
-  );
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [deleting, setDeleting] = useState(false);
 
+  // Phase 16: Names of custom categories
+  // and payment methods stored on the device.
+  const [customLabels, setCustomLabels] = useState<CustomOptionLabels>(
+    EMPTY_CUSTOM_OPTION_LABELS,
+  );
+
+  // Non-blocking warning if custom labels
+  // cannot be loaded.
+  const [labelError, setLabelError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLabels = async (): Promise<void> => {
+      try {
+        const labels = await loadCustomOptionLabels();
+
+        if (!active) {
+          return;
+        }
+
+        setCustomLabels(labels);
+        setLabelError(false);
+      } catch (error) {
+        console.error("Failed to load custom transaction labels:", error);
+
+        if (active) {
+          setLabelError(true);
+        }
+      }
+    };
+
+    void loadLabels();
+
+    return () => {
+      active = false;
+    };
+  }, [expense.id]);
+
+  // Resolve any built-in or custom category.
+  const categoryName = useMemo(
+    () => getExpenseCategoryLabel(expense, customLabels),
+    [expense, customLabels],
+  );
+
+  // Resolve any built-in or custom payment method.
+  const paymentMethodName = useMemo(
+    () => getExpensePaymentLabel(expense, customLabels),
+    [expense, customLabels],
+  );
+
   const handleDelete = async (): Promise<void> => {
-    if (deleting) return;
+    if (deleting) {
+      return;
+    }
 
     const confirmed = await confirmDeletion();
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     setDeleting(true);
 
@@ -195,16 +217,13 @@ export default function TransactionDetailsScreen({
 
       onDeleted();
 
-      showMessage(
-        'Expense Deleted',
-        'The expense was deleted successfully.'
-      );
+      showMessage("Expense Deleted", "The expense was deleted successfully.");
     } catch (error) {
-      console.error('Expense deletion failed:', error);
+      console.error("Expense deletion failed:", error);
 
       showMessage(
-        'Delete Failed',
-        'Unable to delete the expense. Please try again.'
+        "Delete Failed",
+        "Unable to delete the expense. Please try again.",
       );
     } finally {
       setDeleting(false);
@@ -225,100 +244,71 @@ export default function TransactionDetailsScreen({
             accessibilityLabel="Back to transactions"
             style={styles.backButton}
           >
-            <ArrowLeft
-              size={22}
-              color={colors.text}
-            />
+            <ArrowLeft size={22} color={colors.text} />
           </Pressable>
 
-          <Text style={styles.heading}>
-            Transaction Details
-          </Text>
+          <Text style={styles.heading}>Transaction Details</Text>
         </View>
 
         {/* Expense amount */}
         <View style={styles.amountCard}>
-          <Text style={styles.amountLabel}>
-            EXPENSE
-          </Text>
+          <Text style={styles.amountLabel}>EXPENSE</Text>
 
-          <Text style={styles.amount}>
-            −{formatINR(expense.amount)}
-          </Text>
+          <Text style={styles.amount}>−{formatINR(expense.amount)}</Text>
 
-          <Text style={styles.categorySubtitle}>
-            {getCategory(expense)}
-          </Text>
+          <Text style={styles.categorySubtitle}>{categoryName}</Text>
         </View>
+
+        {/* Warning doesn't block the screen */}
+        {labelError && (
+          <Text style={styles.labelWarning}>
+            Some custom names could not be loaded.
+          </Text>
+        )}
 
         {/* Transaction information */}
         <View style={styles.detailsCard}>
           <DetailRow
             styles={styles}
-            icon={
-              <Tag
-                size={20}
-                color={colors.primary}
-              />
-            }
+            icon={<Tag size={20} color={colors.primary} />}
             label="Category"
-            value={getCategory(expense)}
+            value={categoryName}
           />
 
           <DetailRow
             styles={styles}
-            icon={
-              <CreditCard
-                size={20}
-                color={colors.primary}
-              />
-            }
+            icon={<CreditCard size={20} color={colors.primary} />}
             label="Payment Method"
-            value={getPaymentMethod(expense)}
+            value={paymentMethodName}
           />
 
           <DetailRow
             styles={styles}
-            icon={
-              <CalendarDays
-                size={20}
-                color={colors.primary}
-              />
-            }
+            icon={<CalendarDays size={20} color={colors.primary} />}
             label="Transaction Date"
             value={formatDate(expense.transactionDate)}
           />
 
           <DetailRow
             styles={styles}
-            icon={
-              <FileText
-                size={20}
-                color={colors.primary}
-              />
-            }
+            icon={<FileText size={20} color={colors.primary} />}
             label="Notes"
-            value={expense.notes || 'No notes added'}
+            value={expense.notes || "No notes added"}
           />
         </View>
 
         {/* Recorded timestamp */}
         <View style={styles.metadata}>
-          <Text style={styles.metadataLabel}>
-            Recorded on
-          </Text>
+          <Text style={styles.metadataLabel}>Recorded on</Text>
 
           <Text style={styles.metadataValue}>
-            {new Date(expense.createdAt).toLocaleString(
-              'en-IN',
-              {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-              }
-            )}
+            {new Date(expense.createdAt).toLocaleString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
           </Text>
         </View>
 
@@ -329,19 +319,14 @@ export default function TransactionDetailsScreen({
             disabled={deleting}
             accessibilityRole="button"
             accessibilityLabel="Edit expense"
-            style={[
-              styles.actionButton,
-              styles.editButton,
-            ]}
+            accessibilityState={{
+              disabled: deleting,
+            }}
+            style={[styles.actionButton, styles.editButton]}
           >
-            <Pencil
-              size={19}
-              color={colors.primary}
-            />
+            <Pencil size={19} color={colors.primary} />
 
-            <Text style={styles.editButtonText}>
-              Edit Expense
-            </Text>
+            <Text style={styles.editButtonText}>Edit Expense</Text>
           </Pressable>
 
           <Pressable
@@ -349,20 +334,15 @@ export default function TransactionDetailsScreen({
             disabled={deleting}
             accessibilityRole="button"
             accessibilityLabel="Delete expense"
-            style={[
-              styles.actionButton,
-              styles.deleteButton,
-            ]}
+            accessibilityState={{
+              disabled: deleting,
+            }}
+            style={[styles.actionButton, styles.deleteButton]}
           >
-            <Trash2
-              size={19}
-              color={colors.error}
-            />
+            <Trash2 size={19} color={colors.error} />
 
             <Text style={styles.deleteButtonText}>
-              {deleting
-                ? 'Deleting...'
-                : 'Delete Expense'}
+              {deleting ? "Deleting..." : "Delete Expense"}
             </Text>
           </Pressable>
         </View>
@@ -371,7 +351,6 @@ export default function TransactionDetailsScreen({
   );
 }
 
-// Theme-aware styles
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     safeArea: {
@@ -386,8 +365,8 @@ function createStyles(colors: ThemeColors) {
     },
 
     header: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.md,
       marginBottom: spacing.xl,
     },
@@ -399,8 +378,8 @@ function createStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     heading: {
@@ -417,7 +396,7 @@ function createStyles(colors: ThemeColors) {
       borderColor: colors.expenseBorder,
       borderRadius: radius.large,
       padding: spacing.xl,
-      alignItems: 'center',
+      alignItems: "center",
       marginBottom: spacing.xl,
     },
 
@@ -452,8 +431,8 @@ function createStyles(colors: ThemeColors) {
     },
 
     detailRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.md,
       paddingVertical: spacing.lg,
       borderBottomWidth: 1,
@@ -465,8 +444,8 @@ function createStyles(colors: ThemeColors) {
       height: 44,
       backgroundColor: colors.primaryLight,
       borderRadius: radius.medium,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     detailContent: {
@@ -488,7 +467,7 @@ function createStyles(colors: ThemeColors) {
     },
 
     metadata: {
-      alignItems: 'center',
+      alignItems: "center",
       marginTop: spacing.xl,
       gap: spacing.xs,
     },
@@ -506,7 +485,7 @@ function createStyles(colors: ThemeColors) {
     },
 
     actions: {
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: spacing.md,
       marginTop: spacing.xxl,
     },
@@ -515,9 +494,9 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       minHeight: 54,
       borderRadius: radius.medium,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
       gap: spacing.sm,
       paddingHorizontal: spacing.sm,
     },
@@ -546,6 +525,13 @@ function createStyles(colors: ThemeColors) {
       fontSize: typography.sizes.small,
       fontWeight: typography.weights.semibold,
       color: colors.error,
+    },
+
+    labelWarning: {
+      fontFamily: typography.fontFamily,
+      fontSize: typography.sizes.small,
+      color: colors.error,
+      marginBottom: spacing.md,
     },
   });
 }

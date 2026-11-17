@@ -1,0 +1,595 @@
+﻿npx.cmd 
+: PASS s
+rc/servi
+ces/__te
+sts__/ba
+ckupRest
+oreWrite
+.web.tes
+t.ts
+At 
+line:1 
+char:1
++ 
+npx.cmd 
+jest --r
+unInBand
+ --no-ca
+che 
+2>&1 | O
+ut-File 
+-FilePat
+h 
+.\jest- 
+...
++ ~~~~~~
+~~~~~~~~
+~~~~~~~~
+~~~~~~~~
+~~~~~~~~
+~~
+    + C 
+   ate  
+  gor   
+ yIn    
+fo      
+        
+        
+    : N 
+   otS  
+  pec   
+ ifi    
+ed:     
+(P    
+ASS     
+sr    
+c/s    
+erv    
+ic.    
+..i    
+te.    
+web    
+.te    
+st.    
+ts:    
+Str    
+ing    
+) [    
+],     
+Rem    
+ote    
+Exc    
+ept    
+ion
+    + F 
+   ull  
+  yQu   
+ ali    
+fie    
+dEr    
+ror    
+Id     
+: N    
+ati    
+veC    
+omm    
+and    
+Err    
+or
+ 
+FAIL src
+/service
+s/__test
+s__/back
+upRestor
+eWrite.t
+est.ts
+  ΓùÅ 
+Shavro p
+rotected
+ 
+restore 
+ΓÇ║ reco
+vers ori
+ginal 
+data 
+when 
+journal 
+and comp
+letion 
+marker 
+both 
+exist
+
+    
+Tests 
+cannot 
+be 
+nested. 
+Test "su
+ccessful
+ 
+restore 
+retains 
+a commit
+ted inte
+grity 
+record" 
+cannot 
+run 
+because 
+it is 
+nested 
+within "
+recovers
+ origina
+l data 
+when 
+journal 
+and comp
+letion 
+marker 
+both 
+exist".
+
+    
+[0m 
+[90m 
+708 
+|[39m  
+   )[33
+m;[39m
+     
+[90m 
+709 
+|[39m
+    [31
+m[1m>[
+22m[39m
+[90m 
+710 
+|[39m  
+   test(
+[32m"su
+ccessful
+ 
+restore 
+retains 
+a commit
+ted inte
+grity re
+cord"[3
+9m[33m,
+[39m [
+36masync
+[39m 
+() [33m
+=>[39m 
+{
+     
+[90m   
+  
+|[39m  
+       
+[31m[1m
+^[22m[
+39m
+     
+[90m 
+711 
+|[39m  
+     [3
+6mconst
+[39m 
+backup 
+[33m=[3
+9m makeB
+ackup()
+[33m;[3
+9m
+     
+[90m 
+712 
+|[39m
+     
+[90m 
+713 
+|[39m  
+     [3
+6mawait
+[39m app
+lyShavro
+Restore(
+backup)
+[33m;[3
+9m[0m
+
+      
+at event
+Handler 
+(node_mo
+dules/je
+st-circu
+s/build/
+jestAdap
+terInit.
+js:146:4
+4)
+      
+at Objec
+t.<anony
+mous> (s
+rc/servi
+ces/__te
+sts__/ba
+ckupRest
+oreWrite
+.test.ts
+:710:9)
+      
+at async
+Generato
+rStep (n
+ode_modu
+les/@bab
+el/runti
+me/helpe
+rs/async
+ToGenera
+tor.js:3
+:17)
+      
+at 
+_next (n
+ode_modu
+les/@bab
+el/runti
+me/helpe
+rs/async
+ToGenera
+tor.js:1
+7:9)
+      
+at node_
+modules/
+@babel/r
+untime/h
+elpers/a
+syncToGe
+nerator.
+js:22:7
+      
+at Objec
+t.<anony
+mous> (n
+ode_modu
+les/@bab
+el/runti
+me/helpe
+rs/async
+ToGenera
+tor.js:1
+4:12)
+
+  ΓùÅ 
+Shavro p
+rotected
+ 
+restore 
+ΓÇ║ reco
+vers ori
+ginal 
+data 
+when 
+journal 
+and comp
+letion 
+marker 
+both 
+exist
+
+    
+Tests 
+cannot 
+be 
+nested. 
+Test 
+"allows 
+another 
+restore 
+after a 
+previous
+ 
+restore 
+was comm
+itted" 
+cannot 
+run 
+because 
+it is 
+nested 
+within "
+recovers
+ origina
+l data 
+when 
+journal 
+and comp
+letion 
+marker 
+both 
+exist".
+
+    
+[0m 
+[90m 
+735 
+|[39m  
+   })[3
+3m;[39m
+     
+[90m 
+736 
+|[39m
+    [31
+m[1m>[
+22m[39m
+[90m 
+737 
+|[39m  
+   test(
+[32m"al
+lows 
+another 
+restore 
+after a 
+previous
+ 
+restore 
+was comm
+itted"[
+39m[33m
+,[39m 
+[36masyn
+c[39m 
+() [33m
+=>[39m 
+{
+     
+[90m   
+  
+|[39m  
+       
+[31m[1m
+^[22m[
+39m
+     
+[90m 
+738 
+|[39m  
+     [3
+6mconst
+[39m fir
+stBackup
+ [33m=
+[39m mak
+eBackup(
+)[33m;
+[39m
+     
+[90m 
+739 
+|[39m
+     
+[90m 
+740 
+|[39m  
+     [3
+6mawait
+[39m app
+lyShavro
+Restore(
+firstBac
+kup)[33
+m;[39m
+[0m
+
+      
+at event
+Handler 
+(node_mo
+dules/je
+st-circu
+s/build/
+jestAdap
+terInit.
+js:146:4
+4)
+      
+at Objec
+t.<anony
+mous> (s
+rc/servi
+ces/__te
+sts__/ba
+ckupRest
+oreWrite
+.test.ts
+:737:9)
+      
+at async
+Generato
+rStep (n
+ode_modu
+les/@bab
+el/runti
+me/helpe
+rs/async
+ToGenera
+tor.js:3
+:17)
+      
+at 
+_next (n
+ode_modu
+les/@bab
+el/runti
+me/helpe
+rs/async
+ToGenera
+tor.js:1
+7:9)
+      
+at node_
+modules/
+@babel/r
+untime/h
+elpers/a
+syncToGe
+nerator.
+js:22:7
+      
+at Objec
+t.<anony
+mous> (n
+ode_modu
+les/@bab
+el/runti
+me/helpe
+rs/async
+ToGenera
+tor.js:1
+4:12)
+
+PASS src
+/service
+s/__test
+s__/rest
+oreStart
+upRecove
+ry.test.
+ts
+PASS src
+/service
+s/__test
+s__/inco
+meStorag
+e.web.te
+st.ts
+PASS src
+/service
+s/__test
+s__/stor
+ageOpera
+tionGuar
+d.test.t
+s
+PASS src
+/service
+s/__test
+s__/cust
+omPaymen
+tMethods
+Safety.t
+est.ts
+PASS src
+/service
+s/__test
+s__/cust
+omCatego
+riesSafe
+ty.test.
+ts
+PASS src
+/service
+s/__test
+s__/rest
+oreRecov
+eryState
+.test.ts
+PASS src
+/service
+s/__test
+s__/expe
+nseStora
+ge.web.t
+est.ts
+PASS src
+/service
+s/__test
+s__/rest
+oreRollb
+ackClean
+up.test.
+ts
+PASS src
+/service
+s/__test
+s__/brow
+serFinan
+cialLock
+.test.ts
+PASS src
+/service
+s/__test
+s__/rest
+oreCommi
+tIntegri
+ty.web.t
+est.ts
+PASS src
+/service
+s/__test
+s__/back
+upRestor
+ePersist
+entFailu
+re.web.t
+est.ts
+PASS src
+/service
+s/__test
+s__/expe
+nseStora
+geRoutin
+g.test.t
+s
+PASS src
+/service
+s/__test
+s__/inco
+meStorag
+eRouting
+.test.ts
+PASS src
+/service
+s/__test
+s__/rest
+oreCompl
+etionSta
+te.test.
+ts
+
+Test 
+Suites: 
+1 
+failed, 
+15 
+passed, 
+16 total
+Tests:  
+     1 
+failed, 
+136 
+passed, 
+137 
+total
+Snapshot
+s:   0 
+total
+Time:   
+     
+2.086 s
+Ran all 
+test 
+suites.
