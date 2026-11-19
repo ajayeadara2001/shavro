@@ -6,6 +6,7 @@ import type { ShavroBackup, ShavroBackupSummary } from "../types/backup";
 import {
   BACKUP_STORAGE_KEYS,
   captureRestoreStorageSnapshot,
+  assertLegacyRestoreStorageMode,
 } from "./backupRestore";
 
 import type {
@@ -552,6 +553,9 @@ export async function assertShavroStorageWritable(): Promise<void> {
  */
 export async function recoverInterruptedRestore(): Promise<boolean> {
   return runExclusiveStorageOperation(async () => {
+    await assertLegacyRestoreStorageMode();
+
+    // Keep the remaining existing recovery logic unchanged.
     if (restoreInProgress) {
       throw new Error("Another restore operation is running.");
     }
@@ -646,9 +650,15 @@ export async function applyShavroRestore(
   backup: ShavroBackup,
 ): Promise<ShavroBackupSummary> {
   return runExclusiveStorageOperation(async () => {
+    await assertLegacyRestoreStorageMode();
+
     if (restoreInProgress) {
       throw new Error("A restore operation is already running.");
     }
+
+    restoreInProgress = true;
+
+    // Keep the remaining existing code unchanged.
 
     restoreInProgress = true;
 

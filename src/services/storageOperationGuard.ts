@@ -1,5 +1,7 @@
-import { assertNoPendingRestoreRecovery } from "./restoreRecoveryState";
+import { Platform } from "react-native";
 
+import { assertNoPendingRestoreRecovery } from "./restoreRecoveryState";
+import { assertNoPendingSQLiteRestoreRecovery } from "../database/sqliteRestoreRecovery.native";
 import { runWithBrowserFinancialLock } from "./browserFinancialLock";
 
 /**
@@ -10,7 +12,7 @@ import { runWithBrowserFinancialLock } from "./browserFinancialLock";
  * Features:
  * - Sequential writes within one JS runtime
  * - Exclusive restore/recovery access
- * - Persistent recovery journal checks
+ * - Persistent legacy and native SQLite recovery journal checks
  * - Browser-wide locking for normal writes
  * - Safe lock release after failures
  *
@@ -57,7 +59,7 @@ export function assertNoExclusiveStorageOperation(): void {
  *
  * Native:
  * - Uses the local serialized queue
- * - Checks persistent recovery state
+ * - Checks both legacy and SQLite recovery journals
  *
  * Web:
  * - Uses the local serialized queue
@@ -107,6 +109,13 @@ export async function runFinancialWrite<T>(
       // Fail closed if recovery is pending
       // or storage cannot be inspected.
       await assertNoPendingRestoreRecovery();
+
+      // A pending native SQLite restoration must block all financial
+      // mutations, even before the active provider is selected.
+      // Never load the native SQLite module on web.
+      if (Platform.OS !== "web") {
+        await assertNoPendingSQLiteRestoreRecovery();
+      }
 
       return operation();
     });

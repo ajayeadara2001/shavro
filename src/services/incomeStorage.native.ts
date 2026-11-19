@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { getShavroDatabase } from "../database/shavroDatabase.native";
 import type {
   Income,
   CreateIncomeInput,
@@ -8,7 +8,19 @@ import type {
 
 import { runFinancialWrite } from "./storageOperationGuard";
 
+import { getShavroStorageMode } from "../database/sqliteStorageMode.native";
+
+import {
+  encodeIncomes,
+  decodeIncomes,
+  type IncomeV4Row,
+} from "../database/sqliteFinancialCodec.native";
+
 const STORAGE_KEY = "shavro_income_v1";
+
+// =========================================
+// INCOME VALIDATION
+// =========================================
 
 /**
  * Validate income records.
@@ -17,7 +29,7 @@ const STORAGE_KEY = "shavro_income_v1";
  * paymentMethodId or otherMethodName.
  */
 function isIncome(value: unknown): value is Income {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
   }
 
@@ -102,31 +114,209 @@ function generateId(): string {
   );
 }
 
+// =========================================
+// ASYNCSTORAGE READER
+// =========================================
+
+async function readAsyncStorageIncomes(): Promise<Income[]> {
+  const stored = await AsyncStorage.getItem(STORAGE_KEY);
+
+  if (stored === null) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(stored);
+
+  if (!Array.isArray(parsed) || !parsed.every(isIncome)) {
+    throw new Error("Stored income data is invalid.");
+  }
+
+  return parsed;
+}
+
+// =========================================
+// SQLITE READER
+// =========================================
+
+async function readSQLiteIncomes(): Promise<Income[]> {
+  const db = await getShavroDatabase();
+
+  const rows = await db.getAllAsync<IncomeV4Row>(
+    `SELECT *
+       FROM incomes
+       ORDER BY position ASC`,
+  );
+
+  const incomes = decodeIncomes(rows);
+
+  if (!incomes.every(isIncome)) {
+    throw new Error("SQLite income data is invalid.");
+  }
+
+  return incomes;
+}
+
+// =========================================
+// STORAGE PROVIDER READER
+// =========================================
+
+async function readIncomeStorage(): Promise<Income[]> {
+  const mode = await getShavroStorageMode();
+
+  if (mode === "async-storage") {
+    return readAsyncStorageIncomes();
+  }
+
+  return readSQLiteIncomes();
+}
+
+// =========================================
+// SQLITE WRITER
+// =========================================
+
+/**
+ * Replace the complete income collection
+ * inside one exclusive SQLite transaction.
+ *
+ * SQL rollback protects the existing rows
+ * if any insert or verification fails.
+ *
+ * This is called from runFinancialWrite().
+ */
+async function writeSQLiteIncomes(incomes: Income[]): Promise<void> {
+  if (!incomes.every(isIncome)) {
+    throw new Error("Invalid income data for SQLite.");
+  }
+
+  const encoded = encodeIncomes(incomes);
+  const db = await getShavroDatabase();
+
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.runAsync("DELETE FROM incomes");
+
+    for (const row of encoded) {
+      await tx.runAsync(
+        `INSERT INTO incomes (
+            id,
+            amount_paise,
+            category_id,
+            income_name,
+            payment_method_id,
+            other_method_name,
+            transaction_date,
+            notes,
+            created_at,
+            position,
+            has_payment_method_id,
+            has_other_method_name
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          row.id,
+          row.amount_paise,
+          row.category_id,
+          row.income_name,
+          row.payment_method_id,
+          row.other_method_name,
+          row.transaction_date,
+          row.notes,
+          row.created_at,
+          row.position,
+          row.has_payment_method_id,
+          row.has_other_method_name,
+        ],
+      );
+    }
+
+    // Verify the full stored collection
+    // before committing.
+    const saved = await tx.getAllAsync<IncomeV4Row>(
+      `SELECT *
+           FROM incomes
+           ORDER BY position ASC`,
+    );
+
+    if (saved.length !== encoded.length) {
+      throw new Error("SQLite income count verification failed.");
+    }
+
+    for (let index = 0; index < encoded.length; index += 1) {
+      const expected = encoded[index];
+      const actual = saved[index];
+
+      for (const key of Object.keys(expected)) {
+        const field = key as keyof IncomeV4Row;
+
+        if (actual[field] !== expected[field]) {
+          throw new Error(
+            `SQLite income verification failed ` +
+              `for ${expected.id}, field ${key}.`,
+          );
+        }
+      }
+    }
+
+    // The codec must reproduce the
+    // original ordering and optional
+    // income-field presence.
+    const reconstructed = decodeIncomes(saved);
+
+    if (
+      JSON.stringify(
+        reconstructed.map((item) => Object.entries(item).sort()),
+      ) !== JSON.stringify(incomes.map((item) => Object.entries(item).sort()))
+    ) {
+      throw new Error("SQLite income round-trip verification failed.");
+    }
+  });
+}
+
+// =========================================
+// STORAGE PROVIDER WRITER
+// =========================================
+
+/**
+ * Must be called while holding
+ * runFinancialWrite().
+ *
+ * The storage-mode decision is made
+ * within the existing write reservation.
+ *
+ * Future SQLite activation must also
+ * acquire the same exclusive lock.
+ */
+async function writeIncomeStorage(incomes: Income[]): Promise<void> {
+  const mode = await getShavroStorageMode();
+
+  if (mode === "async-storage") {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(incomes));
+
+    return;
+  }
+
+  await writeSQLiteIncomes(incomes);
+}
+
+// =========================================
+// PUBLIC READ OPERATION
+// =========================================
+
 /**
  * Read income records without acquiring
  * a second financial write lock.
  */
 export async function getIncomes(): Promise<Income[]> {
   try {
-    const stored = await AsyncStorage.getItem(STORAGE_KEY);
-
-    if (stored === null) {
-      return [];
-    }
-
-    const parsed: unknown = JSON.parse(stored);
-
-    if (!Array.isArray(parsed) || !parsed.every(isIncome)) {
-      throw new Error("Stored income data is invalid.");
-    }
-
-    return parsed;
+    return await readIncomeStorage();
   } catch (error) {
     console.error("Failed to read incomes:", error);
 
     throw new Error("Unable to load saved incomes.");
   }
 }
+
+// =========================================
+// SAVE INCOME
+// =========================================
 
 /**
  * Save income using the shared,
@@ -149,10 +339,7 @@ export async function saveIncome(input: CreateIncomeInput): Promise<Income> {
     }
 
     try {
-      await AsyncStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify([income, ...incomes]),
-      );
+      await writeIncomeStorage([income, ...incomes]);
 
       return income;
     } catch (error) {
@@ -162,6 +349,10 @@ export async function saveIncome(input: CreateIncomeInput): Promise<Income> {
     }
   });
 }
+
+// =========================================
+// UPDATE INCOME
+// =========================================
 
 /**
  * Update income without changing its
@@ -220,7 +411,7 @@ export async function updateIncome(
     updatedIncomes[index] = updatedIncome;
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedIncomes));
+      await writeIncomeStorage(updatedIncomes);
 
       return updatedIncome;
     } catch (error) {
@@ -230,6 +421,10 @@ export async function updateIncome(
     }
   });
 }
+
+// =========================================
+// DELETE INCOME
+// =========================================
 
 /**
  * Delete income using the financial
@@ -246,7 +441,7 @@ export async function deleteIncome(id: string): Promise<void> {
     const remaining = incomes.filter((income) => income.id !== id);
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
+      await writeIncomeStorage(remaining);
     } catch (error) {
       console.error("Failed to delete income:", error);
 

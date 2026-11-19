@@ -57,6 +57,20 @@ jest.mock("lucide-react-native", () => {
     },
   );
 });
+// =========================================
+// NATIVE SQLITE DATABASE MOCK
+// =========================================
+
+/**
+ * These tests verify custom category
+ * business rules using AsyncStorage.
+ *
+ * Prevent importing real Expo SQLite
+ * during Jest module initialization.
+ */
+jest.mock("../../database/shavroDatabase.native", () => ({
+  getShavroDatabase: jest.fn(),
+}));
 
 // =========================================
 // PLATFORM MOCK

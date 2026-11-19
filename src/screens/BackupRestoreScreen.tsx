@@ -34,9 +34,7 @@ import { File } from "expo-file-system";
 import { useAppTheme } from "../context/ThemeContext";
 import { exportShavroBackupFile } from "../services/backupFileExport";
 import { prepareShavroRestore } from "../services/backupRestore";
-import { applyShavroRestore } from "../services/backupRestoreWrite";
-
-import type { ShavroBackupSummary } from "../types/backup";
+import type { ShavroBackup, ShavroBackupSummary } from "../types/backup";
 
 // =========================================
 // CONSTANTS
@@ -49,7 +47,7 @@ const TABLET_BREAKPOINT = 600;
 
 // Deliberately disabled until disposable-data
 // end-to-end restore testing is complete.
-const RESTORE_EXECUTION_ENABLED = true;
+const RESTORE_EXECUTION_ENABLED = false;
 
 // =========================================
 // TYPES
@@ -69,6 +67,67 @@ interface BackupSummaryItem {
 interface BackupRestoreScreenProps {
   onRestoreCompleted?: () => void;
   onRestoreSafetyFailure?: () => void;
+}
+
+/**
+ * Dispatch backup restoration to the
+ * correct financial storage provider.
+ *
+ * The restore UI remains disabled until
+ * all provider-specific recovery paths
+ * have been verified.
+ *
+ * Never silently restore into an
+ * inactive storage provider.
+ */
+async function applyBackupToActiveStorage(backup: ShavroBackup): Promise<void> {
+  // =====================================
+  // WEB — EXISTING RESTORE PROTOCOL
+  // =====================================
+
+  if (Platform.OS === "web") {
+    const { applyShavroRestore } =
+      await import("../services/backupRestoreWrite");
+
+    await applyShavroRestore(backup);
+    return;
+  }
+
+  // =====================================
+  // NATIVE — DETERMINE ACTIVE PROVIDER
+  // =====================================
+
+  const { getShavroStorageMode } =
+    await import("../database/sqliteStorageMode.native");
+
+  const mode = await getShavroStorageMode();
+
+  // =====================================
+  // ASYNCSTORAGE — LEGACY RECOVERY
+  // =====================================
+
+  if (mode === "async-storage") {
+    const { applyShavroRestore } =
+      await import("../services/backupRestoreWrite");
+
+    await applyShavroRestore(backup);
+    return;
+  }
+
+  // =====================================
+  // SQLITE — FAIL CLOSED
+  // =====================================
+
+  if (mode === "sqlite") {
+    throw new Error(
+      "SQLite backup restoration is not enabled yet. " +
+        "The database restore and interrupted-operation " +
+        "recovery checks must pass before restoration " +
+        "can be activated.",
+    );
+  }
+
+  throw new Error("Unknown Shavro storage provider. Restoration blocked.");
 }
 
 // =========================================
@@ -369,7 +428,7 @@ export default function BackupRestoreScreen({
 
       // Protected restore engine handles
       // storage locking, rollback and integrity.
-      await applyShavroRestore(prepared.backup);
+      await applyBackupToActiveStorage(prepared.backup);
 
       confirmationRef.current = false;
       setShowRestoreConfirmation(false);

@@ -59,6 +59,22 @@ jest.mock("lucide-react-native", () => {
 });
 
 // =========================================
+// NATIVE SQLITE DATABASE MOCK
+// =========================================
+
+/**
+ * These tests verify payment method
+ * business rules using AsyncStorage.
+ *
+ * Th
+ * e real native SQLite database is
+ * not required in this test suite.
+ */
+jest.mock("../../database/shavroDatabase.native", () => ({
+  getShavroDatabase: jest.fn(),
+}));
+
+// =========================================
 // PLATFORM MOCK
 // =========================================
 

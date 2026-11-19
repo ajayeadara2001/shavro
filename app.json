@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "shavro",
+    "name": "Shavro",
     "slug": "shavro",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,11 +19,23 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
+      "output": "single",
+      "name": "Shavro — Your Money, Made Simple",
+      "shortName": "Shavro",
+      "description": "A simple, private expense and income tracker.",
+      "lang": "en",
+      "display": "standalone",
+      "startUrl": "/",
+      "scope": "/",
+      "themeColor": "#FFFFFF",
+      "backgroundColor": "#FFFFFF",
+      "orientation": "portrait",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-sqlite"
     ]
   }
 }

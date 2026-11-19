@@ -1,12 +1,20 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
-
 import { defaultIncomeCategories } from "../constants/incomeCategories";
 
 import { getExpenses } from "./expenseStorage";
 import { getIncomes } from "./incomeStorage";
 
 import { runFinancialWrite } from "./storageOperationGuard";
+
+import { Platform } from "react-native";
+
+import * as nativeBackend from "./customOptionsStorageBackend.native";
+import * as webBackend from "./customOptionsStorageBackend.web";
+
+const backend = Platform.OS === "web" ? webBackend : nativeBackend;
+
+export const readCustomOptionsValue = backend.readCustomOptionsValue;
+
+export const writeCustomOptionsValue = backend.writeCustomOptionsValue;
 
 export type CategoryScope = "INCOME" | "EXPENSE";
 
@@ -58,20 +66,11 @@ const BUILT_IN_PAYMENT_NAMES = [
 // ----------------------------------------
 
 async function readStorage(key: string): Promise<string | null> {
-  if (Platform.OS === "web") {
-    return window.localStorage.getItem(key);
-  }
-
-  return AsyncStorage.getItem(key);
+  return readCustomOptionsValue(key);
 }
 
 async function writeStorage(key: string, value: string): Promise<void> {
-  if (Platform.OS === "web") {
-    window.localStorage.setItem(key, value);
-    return;
-  }
-
-  await AsyncStorage.setItem(key, value);
+  await writeCustomOptionsValue(key, value);
 }
 
 // ----------------------------------------

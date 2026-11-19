@@ -59,6 +59,53 @@ async function readStorageValue(key: string): Promise<string | null> {
 }
 
 /**
+ * Prevent legacy AsyncStorage restore operations
+ * when native SQLite is the active provider.
+ *
+ * Web remains on localStorage.
+ *
+ * Reject invalid mode markers rather than
+ * silently treating them as AsyncStorage.
+ */
+export async function assertLegacyRestoreStorageMode(): Promise<void> {
+  if (Platform.OS === "web") {
+    return;
+  }
+
+  const raw = await AsyncStorage.getItem("shavro_active_storage_mode_v1");
+
+  // Existing native installations.
+  if (raw === null) {
+    return;
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Shavro storage mode is unreadable. Restore blocked.");
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("Invalid storage mode. Restore blocked.");
+  }
+
+  const state = parsed as Record<string, unknown>;
+
+  if (
+    state.version !== 1 ||
+    state.mode !== "async-storage" ||
+    typeof state.activatedAt !== "string" ||
+    !Number.isFinite(Date.parse(state.activatedAt))
+  ) {
+    throw new Error(
+      "Legacy restore is unavailable for the active storage provider.",
+    );
+  }
+}
+
+/**
  * Parse and validate a selected JSON backup.
  *
  * This function is safe to call before
@@ -100,7 +147,7 @@ export async function captureRestoreStorageSnapshot(): Promise<RestoreStorageSna
   const entries = Object.entries(BACKUP_STORAGE_KEYS) as Array<
     [BackupCollectionName, string]
   >;
-
+  await assertLegacyRestoreStorageMode();
   try {
     const values = await Promise.all(
       entries.map(([, storageKey]) => readStorageValue(storageKey)),

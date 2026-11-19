@@ -10,6 +10,8 @@ import {
 } from "../storageOperationGuard";
 
 import { assertNoPendingRestoreRecovery } from "../restoreRecoveryState";
+import { assertNoPendingSQLiteRestoreRecovery } from "../../database/sqliteRestoreRecovery.native";
+import { Platform } from "react-native";
 
 /**
  * Mock the persistent recovery checker.
@@ -26,7 +28,14 @@ jest.mock("../restoreRecoveryState", () => ({
   assertNoPendingRestoreRecovery: jest.fn(async (): Promise<void> => {}),
 }));
 
+jest.mock("../../database/sqliteRestoreRecovery.native", () => ({
+  assertNoPendingSQLiteRestoreRecovery: jest.fn(async (): Promise<void> => {}),
+}));
+
 const mockRecoveryCheck = jest.mocked(assertNoPendingRestoreRecovery);
+const mockSQLiteRecoveryCheck = jest.mocked(
+  assertNoPendingSQLiteRestoreRecovery,
+);
 
 /**
  * Create a promise whose completion
@@ -55,6 +64,8 @@ describe("Shavro financial storage coordinator", () => {
 
     // Default: no pending recovery journal.
     mockRecoveryCheck.mockResolvedValue(undefined);
+    mockSQLiteRecoveryCheck.mockReset();
+    mockSQLiteRecoveryCheck.mockResolvedValue(undefined);
   });
 
   // -------------------------------------
@@ -305,6 +316,57 @@ describe("Shavro financial storage coordinator", () => {
 
     expect(operation).not.toHaveBeenCalled();
 
+    expect(hasActiveFinancialWrites()).toBe(false);
+  });
+
+  test("native writes check both recovery journals before executing", async () => {
+    if (Platform.OS === "web") {
+      return;
+    }
+
+    const operation = jest.fn(async () => "saved");
+    await expect(runFinancialWrite(operation)).resolves.toBe("saved");
+    expect(mockRecoveryCheck).toHaveBeenCalledTimes(1);
+    expect(mockSQLiteRecoveryCheck).toHaveBeenCalledTimes(1);
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  test("native writes fail closed when an SQLite restore is pending", async () => {
+    if (Platform.OS === "web") {
+      return;
+    }
+
+    mockSQLiteRecoveryCheck.mockRejectedValueOnce(
+      new Error("An SQLite restore is unresolved."),
+    );
+    const operation = jest.fn(async () => "must not save");
+
+    await expect(runFinancialWrite(operation)).rejects.toThrow(
+      "SQLite restore is unresolved",
+    );
+    expect(operation).not.toHaveBeenCalled();
+    expect(hasActiveFinancialWrites()).toBe(false);
+  });
+
+  test("native write queue recovers after SQLite recovery rejection", async () => {
+    if (Platform.OS === "web") {
+      return;
+    }
+
+    mockSQLiteRecoveryCheck
+      .mockRejectedValueOnce(new Error("SQLite recovery pending"))
+      .mockResolvedValueOnce(undefined);
+
+    const firstOperation = jest.fn(async () => "first");
+    const secondOperation = jest.fn(async () => "second");
+
+    const first = runFinancialWrite(firstOperation);
+    const second = runFinancialWrite(secondOperation);
+
+    await expect(first).rejects.toThrow("SQLite recovery pending");
+    await expect(second).resolves.toBe("second");
+    expect(firstOperation).not.toHaveBeenCalled();
+    expect(secondOperation).toHaveBeenCalledTimes(1);
     expect(hasActiveFinancialWrites()).toBe(false);
   });
 

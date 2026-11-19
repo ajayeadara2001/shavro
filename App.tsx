@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import ShavroStartup from "./src/components/ShavroStartup";
+
 import {
-  ActivityIndicator,
   Keyboard,
   Platform,
   Pressable,
@@ -43,6 +44,7 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import BackupRestoreScreen from "./src/screens/BackupRestoreScreen";
 
 import { recoverInterruptedRestore } from "./src/services/backupRestoreWrite";
+
 import { assertNoPendingRestoreRecovery } from "./src/services/restoreRecoveryState";
 
 import type { Expense } from "./src/types/expense";
@@ -50,9 +52,17 @@ import type { Income } from "./src/types/income";
 
 import { typography } from "./src/constants/theme";
 
+// =========================================
+// TYPES
+// =========================================
+
 type MainTab = "home" | "history" | "reports" | "settings";
 type AppTab = MainTab | "add" | "income";
 type StartupStatus = "checking" | "ready" | "error";
+
+// =========================================
+// CONSTANTS
+// =========================================
 
 const DESKTOP_BREAKPOINT = 1000;
 
@@ -101,18 +111,30 @@ function NavigationIcon({
 // =========================================
 
 /**
- * Financial application screens do not mount
- * until interrupted restore recovery and
- * independent integrity checks succeed.
+ * Financial screens remain unavailable
+ * until restore recovery and integrity
+ * checks have completed successfully.
+ *
+ * SQLite remains separate from the
+ * active AsyncStorage financial system.
+ *
+ * Temporary SQLite diagnostic calls
+ * have been removed from App.tsx.
  */
+
 function StartupRecoveryGate() {
   const { colors, isDark } = useAppTheme();
 
   const [status, setStatus] = useState<StartupStatus>("checking");
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const runningRef = useRef(false);
   const mountedRef = useRef(true);
+
+  // =======================================
+  // PROVIDER-AWARE STARTUP RECOVERY
+  // =======================================
 
   const checkRecovery = useCallback(async () => {
     if (runningRef.current) {
@@ -127,13 +149,27 @@ function StartupRecoveryGate() {
     }
 
     try {
-      await recoverInterruptedRestore();
-      await assertNoPendingRestoreRecovery();
+      if (Platform.OS === "web") {
+        // Preserve the existing browser
+        // financial recovery procedure.
+        await recoverInterruptedRestore();
+
+        await assertNoPendingRestoreRecovery();
+      } else {
+        // Native recovery includes provider
+        // verification and SQLite safety checks.
+        const { verifyNativeStartupRecovery } =
+          await import("./src/services/nativeStartupRecovery.native");
+
+        await verifyNativeStartupRecovery();
+      }
 
       if (!mountedRef.current) {
         return;
       }
 
+      // Financial records verified.
+      // The main application can now open.
       setStatus("ready");
     } catch (error) {
       console.error("Shavro startup recovery failed:", error);
@@ -148,11 +184,17 @@ function StartupRecoveryGate() {
           : "Unable to verify saved financial records.",
       );
 
+      // Fail closed: do not display
+      // financial screens on recovery failure.
       setStatus("error");
     } finally {
       runningRef.current = false;
     }
   }, []);
+
+  // =======================================
+  // STARTUP RECOVERY EFFECT
+  // =======================================
 
   useEffect(() => {
     mountedRef.current = true;
@@ -164,6 +206,23 @@ function StartupRecoveryGate() {
     };
   }, [checkRecovery]);
 
+  // =======================================
+  // ANIMATED SHAVRO STARTUP SCREEN
+  // =======================================
+
+  if (status === "checking") {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <ShavroStartup />
+      </>
+    );
+  }
+
+  // =======================================
+  // FINANCIAL APPLICATION READY
+  // =======================================
+
   if (status === "ready") {
     return (
       <AppContent
@@ -174,11 +233,21 @@ function StartupRecoveryGate() {
     );
   }
 
-  const isChecking = status === "checking";
+  // =======================================
+  // DATA RECOVERY ERROR SCREEN
+  // =======================================
+  // Only "error" remains at this point.
+  // The existing retry functionality
+  // must remain available.
 
   return (
     <View
-      style={[styles.startupContainer, { backgroundColor: colors.background }]}
+      style={[
+        styles.startupContainer,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
     >
       <StatusBar style={isDark ? "light" : "dark"} />
 
@@ -192,118 +261,96 @@ function StartupRecoveryGate() {
             },
           ]}
         >
-          {isChecking ? (
-            <>
-              <View
-                style={[
-                  styles.startupIcon,
-                  { backgroundColor: colors.primary + "18" },
-                ]}
-              >
-                <ShieldCheck size={30} color={colors.primary} />
-              </View>
+          <View
+            style={[
+              styles.startupIcon,
+              {
+                backgroundColor: isDark ? "#422525" : "#FEE2E2",
+              },
+            ]}
+          >
+            <AlertTriangle size={30} color="#EF4444" />
+          </View>
 
-              <ActivityIndicator size="large" color={colors.primary} />
+          <Text
+            style={[
+              styles.startupTitle,
+              {
+                color: colors.text,
+              },
+            ]}
+          >
+            Data recovery required
+          </Text>
 
-              <Text style={[styles.startupTitle, { color: colors.text }]}>
-                Checking your data
-              </Text>
+          <Text
+            style={[
+              styles.startupDescription,
+              {
+                color: colors.textSecondary,
+              },
+            ]}
+          >
+            Shavro could not safely verify or complete a previous backup
+            restoration. Your financial screens are temporarily unavailable to
+            prevent further changes.
+          </Text>
 
+          {errorMessage && (
+            <View
+              style={[
+                styles.startupErrorBox,
+                {
+                  borderColor: isDark ? "#7F3535" : "#FECACA",
+                  backgroundColor: isDark ? "#351D1D" : "#FEF2F2",
+                },
+              ]}
+            >
               <Text
+                selectable
                 style={[
-                  styles.startupDescription,
-                  { color: colors.textSecondary },
-                ]}
-              >
-                Shavro is checking your saved financial records and recovering
-                interrupted backup operations if necessary.
-              </Text>
-
-              <Text
-                style={[styles.startupHint, { color: colors.textSecondary }]}
-              >
-                Keep the app open until this check finishes.
-              </Text>
-            </>
-          ) : (
-            <>
-              <View
-                style={[
-                  styles.startupIcon,
+                  styles.startupErrorText,
                   {
-                    backgroundColor: isDark ? "#422525" : "#FEE2E2",
+                    color: isDark ? "#FCA5A5" : "#B91C1C",
                   },
                 ]}
               >
-                <AlertTriangle size={30} color="#EF4444" />
-              </View>
-
-              <Text style={[styles.startupTitle, { color: colors.text }]}>
-                Data recovery required
+                {errorMessage}
               </Text>
-
-              <Text
-                style={[
-                  styles.startupDescription,
-                  { color: colors.textSecondary },
-                ]}
-              >
-                Shavro could not safely verify or complete a previous backup
-                restoration. Your financial screens are temporarily unavailable
-                to prevent further changes.
-              </Text>
-
-              {errorMessage && (
-                <View
-                  style={[
-                    styles.startupErrorBox,
-                    {
-                      borderColor: isDark ? "#7F3535" : "#FECACA",
-                      backgroundColor: isDark ? "#351D1D" : "#FEF2F2",
-                    },
-                  ]}
-                >
-                  <Text
-                    selectable
-                    style={[
-                      styles.startupErrorText,
-                      {
-                        color: isDark ? "#FCA5A5" : "#B91C1C",
-                      },
-                    ]}
-                  >
-                    {errorMessage}
-                  </Text>
-                </View>
-              )}
-
-              <Pressable
-                onPress={() => {
-                  void checkRecovery();
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Retry data recovery"
-                style={({ pressed }) => [
-                  styles.retryButton,
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: pressed ? 0.8 : 1,
-                  },
-                ]}
-              >
-                <RefreshCw size={18} color="#FFFFFF" />
-                <Text style={styles.retryButtonText}>Retry Recovery</Text>
-              </Pressable>
-
-              <Text
-                style={[styles.startupHint, { color: colors.textSecondary }]}
-              >
-                Do not clear Shavro's app data or uninstall the app. Recovery
-                information may be needed to restore your previous financial
-                records.
-              </Text>
-            </>
+            </View>
           )}
+
+          <Pressable
+            onPress={() => {
+              void checkRecovery();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Retry data recovery"
+            style={({ pressed }) => [
+              styles.retryButton,
+              {
+                backgroundColor: colors.primary,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <RefreshCw size={18} color="#FFFFFF" />
+
+            <Text style={styles.retryButtonText}>Retry Recovery</Text>
+          </Pressable>
+
+          <Text
+            style={[
+              styles.startupHint,
+              {
+                color: colors.textSecondary,
+              },
+            ]}
+          >
+            Do not clear Shavro's app data or uninstall the app. Recovery
+            information may be needed to restore your previous financial
+            records.
+          </Text>
         </View>
       </SafeAreaView>
     </View>
@@ -320,10 +367,12 @@ interface AppContentProps {
 
 function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
   const { colors, isDark } = useAppTheme();
+
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   const isDesktop = Platform.OS === "web" && width >= DESKTOP_BREAKPOINT;
+
   const topInset = Platform.OS === "web" ? 0 : insets.top;
 
   // =======================================
@@ -335,12 +384,18 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
   const [showBackupRestore, setShowBackupRestore] = useState(false);
 
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+
   const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
 
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
+
   const [incomeToEdit, setIncomeToEdit] = useState<Income | null>(null);
 
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // =======================================
+  // REFRESH FINANCIAL SCREENS
+  // =======================================
 
   const refreshScreens = (): void => {
     setRefreshKey((previous) => previous + 1);
@@ -371,6 +426,7 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
     Keyboard.dismiss();
 
     clearSelections();
+
     setActiveTab("settings");
     setShowBackupRestore(true);
   };
@@ -382,21 +438,30 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
     setActiveTab("settings");
   };
 
-  // NEW: Callback after verified restore success.
+  // =======================================
+  // RESTORE SUCCESS CALLBACK
+  // =======================================
+
   const handleRestoreCompleted = (): void => {
     Keyboard.dismiss();
 
     clearSelections();
+
     setShowBackupRestore(false);
     setActiveTab("home");
 
     refreshScreens();
   };
 
+  // =======================================
+  // TRANSACTION DETAILS NAVIGATION
+  // =======================================
+
   const openExpenseTransaction = (expense: Expense): void => {
     Keyboard.dismiss();
 
     setShowBackupRestore(false);
+
     setExpenseToEdit(null);
     setIncomeToEdit(null);
 
@@ -408,6 +473,7 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
     Keyboard.dismiss();
 
     setShowBackupRestore(false);
+
     setExpenseToEdit(null);
     setIncomeToEdit(null);
 
@@ -421,10 +487,17 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
     clearSelections();
     setShowBackupRestore(false);
 
-    // Existing behavior: return to Transactions.
+    // Preserve existing behavior:
+    // return to Transactions after
+    // closing or deleting details.
     setActiveTab("history");
+
     refreshScreens();
   };
+
+  // =======================================
+  // EDIT TRANSACTION NAVIGATION
+  // =======================================
 
   const openEditExpense = (expense: Expense): void => {
     Keyboard.dismiss();
@@ -454,13 +527,20 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
     setActiveTab("income");
   };
 
+  // =======================================
+  // SAVE / EDIT COMPLETION
+  // =======================================
+
   const finishTransaction = (): void => {
     switchTab("home");
   };
 
   const finishEditingExpense = finishTransaction;
+
   const finishEditingIncome = finishTransaction;
+
   const finishAddingExpense = finishTransaction;
+
   const finishAddingIncome = finishTransaction;
 
   // =======================================
@@ -468,6 +548,7 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
   // =======================================
 
   const isEditingExpense = expenseToEdit !== null;
+
   const isEditingIncome = incomeToEdit !== null;
 
   const isViewingDetails = selectedExpense !== null || selectedIncome !== null;
@@ -504,10 +585,12 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
         accessibilityState={{ selected }}
         style={({ pressed }) => [
           desktop ? styles.sidebarItem : styles.tab,
+
           desktop &&
             selected && {
               backgroundColor: colors.primary + "14",
             },
+
           {
             opacity: pressed ? 0.75 : 1,
           },
@@ -518,8 +601,10 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
         <Text
           style={[
             desktop ? styles.sidebarLabel : styles.tabLabel,
+
             {
               color: iconColor,
+
               fontWeight: selected
                 ? typography.weights.semibold
                 : typography.weights.regular,
@@ -537,6 +622,10 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
   // =======================================
 
   const renderScreen = () => {
+    // =====================================
+    // BACKUP & RESTORE
+    // =====================================
+
     if (showBackupRestore) {
       return (
         <View style={styles.formContainer}>
@@ -574,6 +663,10 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
       );
     }
 
+    // =====================================
+    // EXPENSE DETAILS
+    // =====================================
+
     if (selectedExpense) {
       return (
         <TransactionDetailsScreen
@@ -585,6 +678,10 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
       );
     }
 
+    // =====================================
+    // INCOME DETAILS
+    // =====================================
+
     if (selectedIncome) {
       return (
         <IncomeDetailsScreen
@@ -595,6 +692,10 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
         />
       );
     }
+
+    // =====================================
+    // HOME DASHBOARD
+    // =====================================
 
     if (activeTab === "home") {
       return (
@@ -609,13 +710,25 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
       );
     }
 
+    // =====================================
+    // REPORTS
+    // =====================================
+
     if (activeTab === "reports") {
       return <ReportsScreen key={`reports-${refreshKey}`} />;
     }
 
+    // =====================================
+    // SETTINGS
+    // =====================================
+
     if (activeTab === "settings") {
       return <SettingsScreen onOpenBackup={openBackupRestore} />;
     }
+
+    // =====================================
+    // ADD / EDIT EXPENSE
+    // =====================================
 
     if (activeTab === "add") {
       return (
@@ -657,6 +770,10 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
       );
     }
 
+    // =====================================
+    // ADD / EDIT INCOME
+    // =====================================
+
     if (activeTab === "income") {
       return (
         <View style={styles.formContainer}>
@@ -664,7 +781,9 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
             edges={["top"]}
             style={[
               styles.formHeaderSafeArea,
-              { backgroundColor: colors.background },
+              {
+                backgroundColor: colors.background,
+              },
             ]}
           >
             <Pressable
@@ -695,6 +814,10 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
       );
     }
 
+    // =====================================
+    // TRANSACTION HISTORY
+    // =====================================
+
     return (
       <TransactionHistoryScreen
         key={`history-${refreshKey}`}
@@ -713,7 +836,14 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
     <>
       <StatusBar style={isDark ? "light" : "dark"} />
 
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
         <View
           style={[
             styles.appShell,
@@ -740,7 +870,9 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
                 <Text
                   style={[
                     styles.brandSubtitle,
-                    { color: colors.textSecondary },
+                    {
+                      color: colors.textSecondary,
+                    },
                   ]}
                 >
                   Your Money, Made Simple
@@ -756,7 +888,9 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
               <View
                 style={[
                   styles.sidebarFooter,
-                  { borderTopColor: colors.border },
+                  {
+                    borderTopColor: colors.border,
+                  },
                 ]}
               >
                 <ShieldCheck size={17} color={colors.primary} />
@@ -764,7 +898,9 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
                 <Text
                   style={[
                     styles.sidebarFooterText,
-                    { color: colors.textSecondary },
+                    {
+                      color: colors.textSecondary,
+                    },
                   ]}
                 >
                   Your finances stay on your device
@@ -808,6 +944,37 @@ function AppContent({ onRestoreSafetyFailure }: AppContentProps) {
 // =========================================
 
 export default function App() {
+  useEffect(() => {
+    if (!__DEV__ || Platform.OS === "web") {
+      return;
+    }
+
+    let mounted = true;
+
+    async function verifySQLite() {
+      try {
+        const { runShavroSQLiteIntegrationCheck } =
+          await import("./src/database/sqliteNativeIntegrationCheck.native");
+
+        const result = await runShavroSQLiteIntegrationCheck();
+
+        if (mounted) {
+          console.log("[Shavro Android SQLite Verification]", result);
+        }
+      } catch (error) {
+        if (mounted) {
+          console.error("[Shavro Android SQLite Verification Failed]", error);
+        }
+      }
+    }
+
+    void verifySQLite();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
     <SafeAreaProvider>
       <ThemeProvider>
@@ -822,6 +989,10 @@ export default function App() {
 // =========================================
 
 const styles = StyleSheet.create({
+  // =======================================
+  // MAIN APP CONTAINERS
+  // =======================================
+
   container: {
     flex: 1,
     width: "100%",
@@ -850,9 +1021,9 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
 
-  // =========================================
+  // =======================================
   // DESKTOP SIDEBAR
-  // =========================================
+  // =======================================
 
   sidebar: {
     width: 248,
@@ -891,9 +1062,8 @@ const styles = StyleSheet.create({
     minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    gap: 14,
+    justifyContent: "center",
+    gap: 8,
   },
 
   sidebarLabel: {
@@ -917,9 +1087,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // =========================================
+  // =======================================
   // SHARED FORM / BACKUP LAYOUT
-  // =========================================
+  // =======================================
 
   formContainer: {
     flex: 1,
@@ -953,9 +1123,9 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
 
-  // =========================================
+  // =======================================
   // MOBILE BOTTOM NAVIGATION
-  // =========================================
+  // =======================================
 
   tabBarSafeArea: {
     width: "100%",
@@ -985,9 +1155,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // =========================================
+  // =======================================
   // STARTUP RECOVERY SCREEN
-  // =========================================
+  // =======================================
 
   startupContainer: {
     flex: 1,
@@ -1063,7 +1233,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 16,
   },
 
   retryButtonText: {
